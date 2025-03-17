@@ -1,0 +1,41 @@
+name: Unikorn Push
+on:
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+    - ready_for_review
+permissions:
+  contents: write
+jobs:
+  Static:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Setup Go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: go.mod
+        cache: true
+    - name: Touch
+      run: make touch
+    - name: License Checker
+      run: make license
+    - name: Validate OpenAPI Schema
+      run: make validate
+  Runtime:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Setup Go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: go.mod
+        cache: true
+    - name: Golang CI/Helm Lint
+      run: make lint
+    - name: Build Command
+      run: make

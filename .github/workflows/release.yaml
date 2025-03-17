@@ -1,0 +1,41 @@
+name: Release
+on:
+  push:
+    branches-ignore:
+    - '*'
+    tags:
+    - '*'
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Setup Go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: go.mod
+        cache: true
+    - name: Build and Push Images
+      run: make -e RELEASE=1 VERSION=${{ github.ref_name }}
+    - name: Create Artefacts
+      run: |
+        cp bin/amd64-linux/kubectl-unikorn kubectl-unikorn-amd64-linux
+        cp bin/arm64-linux/kubectl-unikorn kubectl-unikorn-arm64-linux
+        cp bin/arm64-darwin/kubectl-unikorn kubectl-unikorn-arm64-darwin
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        name: Release ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
+        files: |
+          kubectl-unikorn-amd64-linux
+          kubectl-unikorn-arm64-linux
+          kubectl-unikorn-arm64-darwin
+          cmd/kubectl-unikorn/kubectl_complete-unikorn.bash
+          cmd/kubectl-unikorn/kubectl_complete-unikorn.zsh
