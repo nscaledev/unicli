@@ -186,6 +186,9 @@ func getUser(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "user",
 		Short: "List users",
+		Aliases: []string{
+			"users",
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()

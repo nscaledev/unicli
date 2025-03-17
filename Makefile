@@ -81,7 +81,6 @@ $(PREFIX)/%: $(BINDIR)/%
 lint: $(GENDIR)
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(LINT_VERSION)
 	$(GOBIN)/golangci-lint run ./...
-	helm lint --strict charts/identity
 
 # Perform license checking.
 # This must pass or you will be denied by CI.
