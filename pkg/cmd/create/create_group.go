@@ -78,15 +78,15 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 		return err
 	}
 
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organization.kubectl-unikorn.unikorn-cloud.org", "")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organizations.identity.unikorn-cloud.org", "unikorn-identity")); err != nil {
 		return err
 	}
 
-	if err := cmd.RegisterFlagCompletionFunc("role", factory.ResourceNameCompletionFunc("roles.kubectl-unikorn.unikorn-cloud.org", "")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("role", factory.RoleNameCompletionFunc()); err != nil {
 		return err
 	}
 
-	if err := cmd.RegisterFlagCompletionFunc("user", factory.UserSubjectCompletionFunc("users.kubectl-unikorn.unikorn-cloud.org", "")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("user", factory.UserSubjectCompletionFunc()); err != nil {
 		return err
 	}
 
@@ -220,6 +220,8 @@ func (o *createGroupOptions) validate(ctx context.Context, cli client.Client) er
 }
 
 func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) error {
+	// TODO: we need to create organization users and link them to the group
+	// not the underlying user.
 	group := &identityv1.Group{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: o.organizationNamespace,

@@ -56,7 +56,7 @@ func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factor
 	cmd.Flags().Var(&o.organization, "organization", "Organization name.")
 	cmd.Flags().StringVar(&o.email, "email", "", "User subject email address.")
 
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organization.kubectl-unikorn.unikorn-cloud.org", "")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organizations.identity.unikorn-cloud.org", "unikorn-identity")); err != nil {
 		return err
 	}
 

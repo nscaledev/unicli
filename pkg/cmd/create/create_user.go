@@ -36,13 +36,13 @@ import (
 type createUserOptions struct {
 	ConfigFlags *genericclioptions.ConfigFlags
 
-	user string
+	email string
 }
 
 func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().StringVar(&o.user, "user", "", "User users, may be specified more than once.")
+	cmd.Flags().StringVar(&o.email, "email", "", "User's subject email address.")
 
-	if err := cmd.MarkFlagRequired("user"); err != nil {
+	if err := cmd.MarkFlagRequired("email"); err != nil {
 		return err
 	}
 
@@ -71,7 +71,7 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 			},
 		},
 		Spec: identityv1.UserSpec{
-			Subject: o.user,
+			Subject: o.email,
 			State:   identityv1.UserStateActive,
 		},
 	}

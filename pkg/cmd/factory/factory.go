@@ -78,10 +78,19 @@ func (f *Factory) ResourceNameCompletionFunc(resourceType, namespace string) fun
 	}
 }
 
-func (f *Factory) UserSubjectCompletionFunc(resourceType, namespace string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+func (f *Factory) RoleNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// TODO: filter out protected roles!
+		template := fmt.Sprintf(`{{ range .items }}{{ index .metadata.labels "%s" }} {{ end }}`, constants.NameLabel)
+
+		return utilcomp.CompGetFromTemplate(&template, f.factory, "unikorn-identity", []string{"roles.identity.unikorn-cloud.org"}, toComplete), cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func (f *Factory) UserSubjectCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		template := `{{ range .items }}{{ .spec.subject }} {{ end }}`
 
-		return utilcomp.CompGetFromTemplate(&template, f.factory, namespace, []string{resourceType}, toComplete), cobra.ShellCompDirectiveNoFileComp
+		return utilcomp.CompGetFromTemplate(&template, f.factory, "unikorn-identity", []string{"users.identity.unikorn-cloud.org"}, toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
 }
