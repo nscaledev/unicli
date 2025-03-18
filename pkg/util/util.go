@@ -22,7 +22,7 @@ import (
 
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/errors"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"

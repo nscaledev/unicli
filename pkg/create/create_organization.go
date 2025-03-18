@@ -27,9 +27,9 @@ import (
 	"github.com/unikorn-cloud/core/pkg/util"
 	"github.com/unikorn-cloud/core/pkg/util/retry"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/errors"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -41,12 +41,12 @@ import (
 type createOrganizationOptions struct {
 	UnikornFlags *flags.UnikornFlags
 
-	name        flags.HostnameVar
+	name        string
 	description string
 }
 
 func (o *createOrganizationOptions) AddFlags(cmd *cobra.Command, _ *factory.Factory) error {
-	cmd.Flags().Var(&o.name, "name", "Organization name.")
+	cmd.Flags().StringVar(&o.name, "name", "", "Organization name.")
 	cmd.Flags().StringVar(&o.description, "description", "", "A verbose organization description.")
 
 	if err := cmd.MarkFlagRequired("name"); err != nil {
@@ -58,7 +58,7 @@ func (o *createOrganizationOptions) AddFlags(cmd *cobra.Command, _ *factory.Fact
 
 // validateOrganization ensures the organization doesn't already exist.
 func (o *createOrganizationOptions) validateOrganization(ctx context.Context, cli client.Client) error {
-	requirement, err := labels.NewRequirement(constants.NameLabel, selection.Equals, []string{o.name.String()})
+	requirement, err := labels.NewRequirement(constants.NameLabel, selection.Equals, []string{o.name})
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (o *createOrganizationOptions) validateOrganization(ctx context.Context, cl
 	}
 
 	if len(resources.Items) != 0 {
-		return fmt.Errorf("%w: expected no organizations to exist with name %s", errors.ErrValidation, o.name.String())
+		return fmt.Errorf("%w: expected no organizations to exist with name %s", errors.ErrValidation, o.name)
 	}
 
 	return nil
@@ -106,7 +106,7 @@ func (o *createOrganizationOptions) execute(ctx context.Context, cli client.Clie
 			Namespace: o.UnikornFlags.IdentityNamespace,
 			Name:      organizationID,
 			Labels: map[string]string{
-				constants.NameLabel: string(o.name),
+				constants.NameLabel: o.name,
 			},
 		},
 	}

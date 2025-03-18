@@ -27,10 +27,9 @@ import (
 	"github.com/unikorn-cloud/core/pkg/constants"
 	coreutil "github.com/unikorn-cloud/core/pkg/util"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/errors"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/util"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -42,28 +41,21 @@ import (
 type createGroupOptions struct {
 	UnikornFlags *flags.UnikornFlags
 
-	organization flags.HostnameVar
-	name         flags.HostnameVar
+	organization *flags.OrganizationFlags
+	name         string
 	description  string
 	roles        []string
 	users        []string
 
-	organizationID        string
-	organizationNamespace string
-	roleIDs               []string
-	userIDs               []string
+	roleIDs []string
+	userIDs []string
 }
 
 func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().Var(&o.organization, "organization", "Organization name.")
-	cmd.Flags().Var(&o.name, "name", "Group name.")
+	cmd.Flags().StringVar(&o.name, "name", "", "Group name.")
 	cmd.Flags().StringVar(&o.description, "description", "", "A verbose organization description.")
 	cmd.Flags().StringSliceVar(&o.roles, "role", nil, "Groups role, may be specified more than once.")
 	cmd.Flags().StringSliceVar(&o.users, "user", nil, "Group users, may be specified more than once.")
-
-	if err := cmd.MarkFlagRequired("organization"); err != nil {
-		return err
-	}
 
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		return err
@@ -77,10 +69,6 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 		return err
 	}
 
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
-		return err
-	}
-
 	if err := cmd.RegisterFlagCompletionFunc("role", factory.RoleNameCompletionFunc()); err != nil {
 		return err
 	}
@@ -89,25 +77,20 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 		return err
 	}
 
-	return nil
-}
-
-// validateOrganization ensures the organization doesn't already exist.
-func (o *createGroupOptions) validateOrganization(ctx context.Context, cli client.Client) error {
-	organization, err := util.GetOrganization(ctx, cli, o.UnikornFlags.IdentityNamespace, o.organization.String())
-	if err != nil {
+	if err := o.organization.AddFlags(cmd, true); err != nil {
 		return err
 	}
 
-	o.organizationID = organization.Name
-	o.organizationNamespace = organization.Status.Namespace
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 // validateGroup ensures the group doesn't already exist.
 func (o *createGroupOptions) validateGroup(ctx context.Context, cli client.Client) error {
-	requirement, err := labels.NewRequirement(constants.NameLabel, selection.Equals, []string{o.name.String()})
+	requirement, err := labels.NewRequirement(constants.NameLabel, selection.Equals, []string{o.name})
 	if err != nil {
 		return err
 	}
@@ -127,7 +110,7 @@ func (o *createGroupOptions) validateGroup(ctx context.Context, cli client.Clien
 	}
 
 	if len(resources.Items) != 0 {
-		return fmt.Errorf("%w: expected no groups to exist with name %s", errors.ErrValidation, o.name.String())
+		return fmt.Errorf("%w: expected no groups to exist with name %s", errors.ErrValidation, o.name)
 	}
 
 	return nil
@@ -174,7 +157,7 @@ func (o *createGroupOptions) validateUsers(ctx context.Context, cli client.Clien
 	o.users = slices.Compact(o.users)
 
 	options := &client.ListOptions{
-		Namespace: o.organizationNamespace,
+		Namespace: o.organization.OrganizationNamespace,
 	}
 
 	var resources identityv1.UserList
@@ -203,7 +186,7 @@ func (o *createGroupOptions) validateUsers(ctx context.Context, cli client.Clien
 
 func (o *createGroupOptions) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
-		o.validateOrganization,
+		o.organization.Validate,
 		o.validateGroup,
 		o.validateRoles,
 		o.validateUsers,
@@ -223,11 +206,11 @@ func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) err
 	// not the underlying user.
 	group := &identityv1.Group{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: o.organizationNamespace,
+			Namespace: o.organization.OrganizationNamespace,
 			Name:      coreutil.GenerateResourceID(),
 			Labels: map[string]string{
-				constants.OrganizationLabel: o.organizationID,
-				constants.NameLabel:         o.name.String(),
+				constants.OrganizationLabel: o.organization.OrganizationID,
+				constants.NameLabel:         o.name,
 			},
 		},
 		Spec: identityv1.GroupSpec{
@@ -253,9 +236,13 @@ func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) err
 	return nil
 }
 
+//nolint:dupl
 func createGroup(factory *factory.Factory) *cobra.Command {
+	unikornFlags := &factory.UnikornFlags
+
 	o := createGroupOptions{
-		UnikornFlags: &factory.UnikornFlags,
+		UnikornFlags: unikornFlags,
+		organization: flags.NewOrganizationFlags(unikornFlags),
 	}
 
 	cmd := &cobra.Command{

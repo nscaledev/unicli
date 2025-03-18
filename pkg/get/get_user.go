@@ -27,11 +27,11 @@ import (
 
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/util"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,48 +44,31 @@ var (
 type createUserOptions struct {
 	UnikornFlags *flags.UnikornFlags
 
-	organization flags.HostnameVar
+	organization *flags.OrganizationFlags
 	email        string
-
-	organizationID        string
-	organizationNamespace string
 }
 
 func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().Var(&o.organization, "organization", "Organization name.")
-	cmd.Flags().StringVar(&o.email, "email", "", "User subject email address.")
-
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
-		return err
-	}
+	cmd.Flags().StringVar(&o.email, "email", "", "User's email address.")
 
 	if err := cmd.RegisterFlagCompletionFunc("email", factory.UserSubjectCompletionFunc()); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-// validateOrganization ensures the organization doesn't already exist.
-func (o *createUserOptions) validateOrganization(ctx context.Context, cli client.Client) error {
-	if o.organization.String() == "" {
-		return nil
-	}
-
-	organization, err := util.GetOrganization(ctx, cli, o.UnikornFlags.IdentityNamespace, o.organization.String())
-	if err != nil {
+	if err := o.organization.AddFlags(cmd, false); err != nil {
 		return err
 	}
 
-	o.organizationID = organization.Name
-	o.organizationNamespace = organization.Status.Namespace
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (o *createUserOptions) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
-		o.validateOrganization,
+		o.organization.Validate,
 	}
 
 	for _, validator := range validators {
@@ -125,7 +108,15 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 
 	organizationUsers := &identityv1.OrganizationUserList{}
 
-	if err := cli.List(ctx, organizationUsers, &client.ListOptions{}); err != nil {
+	options := &client.ListOptions{}
+
+	if o.organization.OrganizationName != "" {
+		options.LabelSelector = labels.SelectorFromSet(labels.Set{
+			constants.OrganizationLabel: o.organization.OrganizationID,
+		})
+	}
+
+	if err := cli.List(ctx, organizationUsers, options); err != nil {
 		return err
 	}
 
@@ -164,7 +155,7 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 			return fmt.Errorf("%w: organization user %s in namespace %s doesn't have corresponding organization resource", ErrConsistency, ou.Name, ou.Namespace)
 		}
 
-		if o.organizationID != "" && organization.Name != o.organizationID {
+		if o.organization.OrganizationID != "" && organization.Name != o.organization.OrganizationID {
 			continue
 		}
 
@@ -182,8 +173,11 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 }
 
 func getUser(factory *factory.Factory) *cobra.Command {
+	unikornFlags := &factory.UnikornFlags
+
 	o := createUserOptions{
-		UnikornFlags: &factory.UnikornFlags,
+		UnikornFlags: unikornFlags,
+		organization: flags.NewOrganizationFlags(unikornFlags),
 	}
 
 	cmd := &cobra.Command{

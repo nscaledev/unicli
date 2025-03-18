@@ -17,41 +17,18 @@ limitations under the License.
 package flags
 
 import (
-	"fmt"
-	"net/url"
+	"context"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/errors"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 
 	"k8s.io/client-go/util/homedir"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-type HostnameVar string
-
-func (v *HostnameVar) Set(s string) error {
-	u, err := url.ParseRequestURI("scheme://" + s)
-	if err != nil {
-		return err
-	}
-
-	if u.Host != s {
-		return fmt.Errorf("%w: %s is not a valid domain name", errors.ErrValidation, s)
-	}
-
-	*v = HostnameVar(s)
-
-	return nil
-}
-
-func (v HostnameVar) String() string {
-	return string(v)
-}
-
-func (v HostnameVar) Type() string {
-	return "domainname"
-}
 
 type UnikornFlags struct {
 	Kubeconfig        string
@@ -66,9 +43,44 @@ func (o *UnikornFlags) AddFlags(f *pflag.FlagSet) {
 }
 
 type OrganizationFlags struct {
+	unikornFlags *UnikornFlags
+
 	OrganizationName string
+
+	OrganizationID        string
+	OrganizationNamespace string
 }
 
-func (o *OrganizationFlags) AddFlags(f *pflag.FlagSet) {
-	f.StringVar(&o.OrganizationName, "organization", "", "Organization to scope to")
+func NewOrganizationFlags(unikornFlags *UnikornFlags) *OrganizationFlags {
+	return &OrganizationFlags{
+		unikornFlags: unikornFlags,
+	}
+}
+
+func (o *OrganizationFlags) AddFlags(cmd *cobra.Command, required bool) error {
+	cmd.Flags().StringVar(&o.OrganizationName, "organization", "", "Organization name to scope to")
+
+	if required {
+		if err := cmd.MarkFlagRequired("organization"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (o *OrganizationFlags) Validate(ctx context.Context, cli client.Client) error {
+	if o.OrganizationName == "" {
+		return nil
+	}
+
+	organization, err := util.GetOrganization(ctx, cli, o.unikornFlags.IdentityNamespace, o.OrganizationName)
+	if err != nil {
+		return err
+	}
+
+	o.OrganizationID = organization.Name
+	o.OrganizationNamespace = organization.Status.Namespace
+
+	return nil
 }

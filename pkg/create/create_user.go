@@ -18,6 +18,8 @@ package create
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -25,8 +27,9 @@ import (
 	"github.com/unikorn-cloud/core/pkg/constants"
 	coreutil "github.com/unikorn-cloud/core/pkg/util"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -36,21 +39,47 @@ import (
 type createUserOptions struct {
 	UnikornFlags *flags.UnikornFlags
 
-	email string
+	email        string
+	organization *flags.OrganizationFlags
 }
 
 func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().StringVar(&o.email, "email", "", "User's subject email address.")
+	cmd.Flags().StringVar(&o.email, "email", "", "User's email address.")
 
 	if err := cmd.MarkFlagRequired("email"); err != nil {
+		return err
+	}
+
+	if err := o.organization.AddFlags(cmd, false); err != nil {
 		return err
 	}
 
 	return nil
 }
 
+func (o *createUserOptions) validateUser(ctx context.Context, cli client.Client) error {
+	resources := &identityv1.UserList{}
+
+	if err := cli.List(ctx, resources, &client.ListOptions{Namespace: o.UnikornFlags.IdentityNamespace}); err != nil {
+		return err
+	}
+
+	matchesEmail := func(user identityv1.User) bool {
+		return user.Spec.Subject == o.email
+	}
+
+	if ok := slices.ContainsFunc(resources.Items, matchesEmail); ok {
+		return fmt.Errorf("%w: user already exists", errors.ErrValidation)
+	}
+
+	return nil
+}
+
 func (o *createUserOptions) validate(ctx context.Context, cli client.Client) error {
-	validators := []func(context.Context, client.Client) error{}
+	validators := []func(context.Context, client.Client) error{
+		o.validateUser,
+		o.organization.Validate,
+	}
 
 	for _, validator := range validators {
 		if err := validator(ctx, cli); err != nil {
@@ -83,9 +112,13 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 	return nil
 }
 
+//nolint:dupl
 func createUser(factory *factory.Factory) *cobra.Command {
+	unikornFlags := &factory.UnikornFlags
+
 	o := createUserOptions{
-		UnikornFlags: &factory.UnikornFlags,
+		UnikornFlags: unikornFlags,
+		organization: flags.NewOrganizationFlags(unikornFlags),
 	}
 
 	cmd := &cobra.Command{

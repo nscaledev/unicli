@@ -14,22 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package get
+package create
 
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get resource information",
+		Use:   "create",
+		Short: "Create a resource",
 	}
 
 	cmd.AddCommand(
-		getUser(factory),
+		createOrganization(factory),
+		createUser(factory),
+		createGroup(factory),
 	)
 
 	return cmd

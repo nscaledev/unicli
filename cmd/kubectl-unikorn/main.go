@@ -22,9 +22,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/create"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/get"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get"
 )
 
 func main() {
