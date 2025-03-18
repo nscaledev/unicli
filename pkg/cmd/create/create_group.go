@@ -35,13 +35,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type createGroupOptions struct {
-	ConfigFlags *genericclioptions.ConfigFlags
+	UnikornFlags *flags.UnikornFlags
 
 	organization flags.HostnameVar
 	name         flags.HostnameVar
@@ -78,7 +77,7 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 		return err
 	}
 
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organizations.identity.unikorn-cloud.org", "unikorn-identity")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
 		return err
 	}
 
@@ -95,7 +94,7 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 
 // validateOrganization ensures the organization doesn't already exist.
 func (o *createGroupOptions) validateOrganization(ctx context.Context, cli client.Client) error {
-	organization, err := util.GetOrganization(ctx, cli, *o.ConfigFlags.Namespace, o.organization.String())
+	organization, err := util.GetOrganization(ctx, cli, o.UnikornFlags.IdentityNamespace, o.organization.String())
 	if err != nil {
 		return err
 	}
@@ -117,7 +116,7 @@ func (o *createGroupOptions) validateGroup(ctx context.Context, cli client.Clien
 	selector = selector.Add(*requirement)
 
 	options := &client.ListOptions{
-		Namespace:     *o.ConfigFlags.Namespace,
+		Namespace:     o.UnikornFlags.IdentityNamespace,
 		LabelSelector: selector,
 	}
 
@@ -141,7 +140,7 @@ func (o *createGroupOptions) validateRoles(ctx context.Context, cli client.Clien
 	o.roles = slices.Compact(o.roles)
 
 	options := &client.ListOptions{
-		Namespace: *o.ConfigFlags.Namespace,
+		Namespace: o.UnikornFlags.IdentityNamespace,
 	}
 
 	var resources identityv1.RoleList
@@ -256,7 +255,7 @@ func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) err
 
 func createGroup(factory *factory.Factory) *cobra.Command {
 	o := createGroupOptions{
-		ConfigFlags: factory.ConfigFlags,
+		UnikornFlags: &factory.UnikornFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -266,10 +265,7 @@ func createGroup(factory *factory.Factory) *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			client, err := factory.Client()
-			if err != nil {
-				return err
-			}
+			client := factory.Client()
 
 			if err := o.validate(ctx, client); err != nil {
 				return err

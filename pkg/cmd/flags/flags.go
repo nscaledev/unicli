@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/spf13/pflag"
+
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/errors"
 )
 
@@ -46,4 +48,22 @@ func (v HostnameVar) String() string {
 
 func (v HostnameVar) Type() string {
 	return "domainname"
+}
+
+type UnikornFlags struct {
+	IdentityNamespace string
+	RegionNamespace   string
+}
+
+func (o *UnikornFlags) AddFlags(f *pflag.FlagSet) {
+	f.StringVar(&o.IdentityNamespace, "identity-namespace", "unikorn-identity", "Identity service namespace")
+	f.StringVar(&o.RegionNamespace, "region-namespace", "unikorn-region", "Region service namespace")
+}
+
+type OrganizationFlags struct {
+	OrganizationName string
+}
+
+func (o *OrganizationFlags) AddFlags(f *pflag.FlagSet) {
+	f.StringVar(&o.OrganizationName, "organization", "", "Organization to scope to")
 }

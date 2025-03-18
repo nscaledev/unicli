@@ -26,15 +26,15 @@ import (
 	coreutil "github.com/unikorn-cloud/core/pkg/util"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type createUserOptions struct {
-	ConfigFlags *genericclioptions.ConfigFlags
+	UnikornFlags *flags.UnikornFlags
 
 	email string
 }
@@ -64,7 +64,7 @@ func (o *createUserOptions) validate(ctx context.Context, cli client.Client) err
 func (o *createUserOptions) execute(ctx context.Context, cli client.Client) error {
 	user := &identityv1.User{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *o.ConfigFlags.Namespace,
+			Namespace: o.UnikornFlags.IdentityNamespace,
 			Name:      coreutil.GenerateResourceID(),
 			Labels: map[string]string{
 				constants.NameLabel: constants.UndefinedName,
@@ -85,7 +85,7 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 
 func createUser(factory *factory.Factory) *cobra.Command {
 	o := createUserOptions{
-		ConfigFlags: factory.ConfigFlags,
+		UnikornFlags: &factory.UnikornFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -95,10 +95,7 @@ func createUser(factory *factory.Factory) *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			client, err := factory.Client()
-			if err != nil {
-				return err
-			}
+			client := factory.Client()
 
 			if err := o.validate(ctx, client); err != nil {
 				return err

@@ -32,7 +32,6 @@ import (
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/util"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,7 +42,7 @@ var (
 )
 
 type createUserOptions struct {
-	ConfigFlags *genericclioptions.ConfigFlags
+	UnikornFlags *flags.UnikornFlags
 
 	organization flags.HostnameVar
 	email        string
@@ -56,7 +55,11 @@ func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factor
 	cmd.Flags().Var(&o.organization, "organization", "Organization name.")
 	cmd.Flags().StringVar(&o.email, "email", "", "User subject email address.")
 
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.ResourceNameCompletionFunc("organizations.identity.unikorn-cloud.org", "unikorn-identity")); err != nil {
+	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
+		return err
+	}
+
+	if err := cmd.RegisterFlagCompletionFunc("email", factory.UserSubjectCompletionFunc()); err != nil {
 		return err
 	}
 
@@ -69,7 +72,7 @@ func (o *createUserOptions) validateOrganization(ctx context.Context, cli client
 		return nil
 	}
 
-	organization, err := util.GetOrganization(ctx, cli, *o.ConfigFlags.Namespace, o.organization.String())
+	organization, err := util.GetOrganization(ctx, cli, o.UnikornFlags.IdentityNamespace, o.organization.String())
 	if err != nil {
 		return err
 	}
@@ -180,7 +183,7 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 
 func getUser(factory *factory.Factory) *cobra.Command {
 	o := createUserOptions{
-		ConfigFlags: factory.ConfigFlags,
+		UnikornFlags: &factory.UnikornFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -193,10 +196,7 @@ func getUser(factory *factory.Factory) *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			client, err := factory.Client()
-			if err != nil {
-				return err
-			}
+			client := factory.Client()
 
 			if err := o.validate(ctx, client); err != nil {
 				return err

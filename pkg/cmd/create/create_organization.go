@@ -34,13 +34,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type createOrganizationOptions struct {
-	ConfigFlags *genericclioptions.ConfigFlags
+	UnikornFlags *flags.UnikornFlags
 
 	name        flags.HostnameVar
 	description string
@@ -68,7 +67,7 @@ func (o *createOrganizationOptions) validateOrganization(ctx context.Context, cl
 	selector = selector.Add(*requirement)
 
 	options := &client.ListOptions{
-		Namespace:     *o.ConfigFlags.Namespace,
+		Namespace:     o.UnikornFlags.IdentityNamespace,
 		LabelSelector: selector,
 	}
 
@@ -104,7 +103,7 @@ func (o *createOrganizationOptions) execute(ctx context.Context, cli client.Clie
 
 	organization := &identityv1.Organization{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *o.ConfigFlags.Namespace,
+			Namespace: o.UnikornFlags.IdentityNamespace,
 			Name:      organizationID,
 			Labels: map[string]string{
 				constants.NameLabel: string(o.name),
@@ -117,7 +116,7 @@ func (o *createOrganizationOptions) execute(ctx context.Context, cli client.Clie
 	}
 
 	callback := func() error {
-		if err := cli.Get(ctx, client.ObjectKey{Namespace: *o.ConfigFlags.Namespace, Name: organizationID}, organization); err != nil {
+		if err := cli.Get(ctx, client.ObjectKey{Namespace: o.UnikornFlags.IdentityNamespace, Name: organizationID}, organization); err != nil {
 			return err
 		}
 
@@ -137,7 +136,7 @@ func (o *createOrganizationOptions) execute(ctx context.Context, cli client.Clie
 
 func createOrganization(factory *factory.Factory) *cobra.Command {
 	o := createOrganizationOptions{
-		ConfigFlags: factory.ConfigFlags,
+		UnikornFlags: &factory.UnikornFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -147,10 +146,7 @@ func createOrganization(factory *factory.Factory) *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			client, err := factory.Client()
-			if err != nil {
-				return err
-			}
+			client := factory.Client()
 
 			if err := o.validate(ctx, client); err != nil {
 				return err

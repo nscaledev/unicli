@@ -17,80 +17,98 @@ limitations under the License.
 package factory
 
 import (
-	"fmt"
+	"context"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
-
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	cmdutil "k8s.io/kubectl/pkg/cmd/util"
-	utilcomp "k8s.io/kubectl/pkg/util/completion"
+	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Factory struct {
-	ConfigFlags *genericclioptions.ConfigFlags
-	factory     cmdutil.Factory
+	UnikornFlags flags.UnikornFlags
+
+	client client.Client
 }
 
-func NewFactory() *Factory {
-	configFlags := genericclioptions.NewConfigFlags(true)
-
+func NewFactory(client client.Client) *Factory {
 	return &Factory{
-		ConfigFlags: configFlags,
-		factory:     cmdutil.NewFactory(configFlags),
+		client: client,
 	}
 }
 
 func (f *Factory) AddFlags(flags *pflag.FlagSet) {
-	f.ConfigFlags.AddFlags(flags)
+	f.UnikornFlags.AddFlags(flags)
 }
 
 func (f *Factory) RegisterCompletionFunctions(cmd *cobra.Command) error {
-	namespaceCompletion := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return utilcomp.CompGetResource(f.factory, "namespace", toComplete), cobra.ShellCompDirectiveNoFileComp
-	}
-
-	if err := cmd.RegisterFlagCompletionFunc("namespace", namespaceCompletion); err != nil {
-		return err
-	}
-
+	// TODO: add namespace lookups for the UnikornFlags
 	return nil
 }
 
-func (f *Factory) Client() (client.Client, error) {
-	config, err := cmdutil.NewFactory(f.ConfigFlags).ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	return client.New(config, client.Options{})
+func (f *Factory) Client() client.Client {
+	return f.client
 }
 
-func (f *Factory) ResourceNameCompletionFunc(resourceType, namespace string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+func (f *Factory) OrganizationNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		template := fmt.Sprintf(`{{ range .items }}{{ index .metadata.labels "%s" }} {{ end }}`, constants.NameLabel)
+		resources := &identityv1.OrganizationList{}
 
-		return utilcomp.CompGetFromTemplate(&template, f.factory, namespace, []string{resourceType}, toComplete), cobra.ShellCompDirectiveNoFileComp
+		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Labels[constants.NameLabel]
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
 func (f *Factory) RoleNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		// TODO: filter out protected roles!
-		template := fmt.Sprintf(`{{ range .items }}{{ index .metadata.labels "%s" }} {{ end }}`, constants.NameLabel)
+		resources := &identityv1.RoleList{}
 
-		return utilcomp.CompGetFromTemplate(&template, f.factory, "unikorn-identity", []string{"roles.identity.unikorn-cloud.org"}, toComplete), cobra.ShellCompDirectiveNoFileComp
+		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		resources.Items = slices.DeleteFunc(resources.Items, func(role identityv1.Role) bool {
+			return role.Spec.Protected
+		})
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Labels[constants.NameLabel]
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
 func (f *Factory) UserSubjectCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		template := `{{ range .items }}{{ .spec.subject }} {{ end }}`
+		resources := &identityv1.UserList{}
 
-		return utilcomp.CompGetFromTemplate(&template, f.factory, "unikorn-identity", []string{"users.identity.unikorn-cloud.org"}, toComplete), cobra.ShellCompDirectiveNoFileComp
+		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Spec.Subject
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
 	}
 }
