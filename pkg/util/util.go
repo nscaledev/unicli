@@ -24,6 +24,8 @@ import (
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
+	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
+	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -57,6 +59,86 @@ func GetOrganization(ctx context.Context, cli client.Client, namespace, organiza
 	}
 
 	return &resources.Items[0], nil
+}
+
+func GetProject(ctx context.Context, cli client.Client, organizationID, projectName string) (*identityv1.Project, error) {
+	l := labels.Set{
+		constants.NameLabel: projectName,
+	}
+
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+
+	options := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+	}
+
+	resources := &identityv1.ProjectList{}
+
+	if err := cli.List(ctx, resources, options); err != nil {
+		return nil, err
+	}
+
+	if len(resources.Items) != 1 {
+		return nil, fmt.Errorf("%w: unable to find project with name %s", errors.ErrValidation, projectName)
+	}
+
+	if resources.Items[0].Status.Namespace == "" {
+		return nil, fmt.Errorf("%w: unable to find project namespace", errors.ErrValidation)
+	}
+
+	return &resources.Items[0], nil
+}
+
+func GetKubernetesCluster(ctx context.Context, cli client.Client, organizationID, projectID, clusterName string) (*kubernetesv1.KubernetesCluster, error) {
+	l := labels.Set{
+		constants.NameLabel: clusterName,
+	}
+
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+
+	if projectID != "" {
+		l[constants.ProjectLabel] = projectID
+	}
+
+	options := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+	}
+
+	resources := &kubernetesv1.KubernetesClusterList{}
+
+	if err := cli.List(ctx, resources, options); err != nil {
+		return nil, err
+	}
+
+	if len(resources.Items) != 1 {
+		return nil, fmt.Errorf("%w: unable to find kubernetes cluster with name %s", errors.ErrValidation, clusterName)
+	}
+
+	return &resources.Items[0], nil
+}
+
+func GetRegion(ctx context.Context, cli client.Client, namespace, id string) (*regionv1.Region, error) {
+	resource := &regionv1.Region{}
+
+	if err := cli.Get(ctx, client.ObjectKey{Namespace: namespace, Name: id}, resource); err != nil {
+		return nil, err
+	}
+
+	return resource, nil
+}
+
+func GetOpenstackIdentity(ctx context.Context, cli client.Client, namespace, id string) (*regionv1.OpenstackIdentity, error) {
+	resource := &regionv1.OpenstackIdentity{}
+
+	if err := cli.Get(ctx, client.ObjectKey{Namespace: namespace, Name: id}, resource); err != nil {
+		return nil, err
+	}
+
+	return resource, nil
 }
 
 func GetUser(ctx context.Context, cli client.Client, namespace, email string) (*identityv1.User, error) {

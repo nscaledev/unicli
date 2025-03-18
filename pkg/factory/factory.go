@@ -27,10 +27,12 @@ import (
 	computev1 "github.com/unikorn-cloud/compute/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -166,6 +168,89 @@ func (f *Factory) OrganizationNameCompletionFunc() func(*cobra.Command, []string
 		resources := &identityv1.OrganizationList{}
 
 		if err := c.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Labels[constants.NameLabel]
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func (f *Factory) ProjectNameCompletionFunc(organizationName *string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		options := &client.ListOptions{}
+
+		if organizationName != nil && *organizationName != "" {
+			organization, err := util.GetOrganization(context.Background(), c, f.UnikornFlags.IdentityNamespace, *organizationName)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+
+			options.LabelSelector = labels.SelectorFromSet(labels.Set{
+				constants.OrganizationLabel: organization.Name,
+			})
+		}
+
+		resources := &identityv1.ProjectList{}
+
+		if err := c.List(context.Background(), resources, options); err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Labels[constants.NameLabel]
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func (f *Factory) KubernetesClusterNameCompletionFunc(organizationName, projectName *string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		l := labels.Set{}
+
+		if organizationName != nil && *organizationName != "" {
+			organization, err := util.GetOrganization(context.Background(), c, f.UnikornFlags.IdentityNamespace, *organizationName)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+
+			l[constants.OrganizationLabel] = organization.Name
+		}
+
+		if projectName != nil && *projectName != "" {
+			project, err := util.GetProject(context.Background(), c, l[constants.OrganizationLabel], *projectName)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveError
+			}
+
+			l[constants.ProjectLabel] = project.Name
+		}
+
+		options := &client.ListOptions{
+			LabelSelector: labels.SelectorFromSet(l),
+		}
+
+		resources := &kubernetesv1.KubernetesClusterList{}
+
+		if err := c.List(context.Background(), resources, options); err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
