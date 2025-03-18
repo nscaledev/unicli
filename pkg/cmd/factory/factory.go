@@ -23,23 +23,48 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	computev1 "github.com/unikorn-cloud/compute/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/cmd/flags"
+	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
+	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8sscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
+
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Factory struct {
-	UnikornFlags flags.UnikornFlags
+func getScheme() (*runtime.Scheme, error) {
+	schemes := []func(*runtime.Scheme) error{
+		k8sscheme.AddToScheme,
+		computev1.AddToScheme,
+		identityv1.AddToScheme,
+		kubernetesv1.AddToScheme,
+		regionv1.AddToScheme,
+	}
 
-	client client.Client
+	scheme := runtime.NewScheme()
+
+	for _, s := range schemes {
+		if err := s(scheme); err != nil {
+			return nil, err
+		}
+	}
+
+	return scheme, nil
 }
 
-func NewFactory(client client.Client) *Factory {
-	return &Factory{
-		client: client,
-	}
+type Factory struct {
+	UnikornFlags flags.UnikornFlags
+}
+
+func NewFactory() *Factory {
+	return &Factory{}
 }
 
 func (f *Factory) AddFlags(flags *pflag.FlagSet) {
@@ -47,20 +72,92 @@ func (f *Factory) AddFlags(flags *pflag.FlagSet) {
 }
 
 func (f *Factory) RegisterCompletionFunctions(cmd *cobra.Command) error {
-	// TODO: add namespace lookups for the UnikornFlags
+	if err := cmd.RegisterFlagCompletionFunc("identity-namespace", f.NamespaceCompletionFunc()); err != nil {
+		return err
+	}
+
+	if err := cmd.RegisterFlagCompletionFunc("region-namespace", f.NamespaceCompletionFunc()); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (f *Factory) Client() client.Client {
-	return f.client
+func (f *Factory) Client() (client.Client, error) {
+	// TODO: signal handler and cancel.
+	ctx := context.Background()
+
+	config, err := clientcmd.BuildConfigFromFlags("", f.UnikornFlags.Kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	scheme, err := getScheme()
+	if err != nil {
+		return nil, err
+	}
+
+	cache, err := cache.New(config, cache.Options{Scheme: scheme})
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		_ = cache.Start(ctx)
+	}()
+
+	cache.WaitForCacheSync(ctx)
+
+	options := client.Options{
+		Scheme: scheme,
+		Cache: &client.CacheOptions{
+			Reader:       cache,
+			Unstructured: false,
+		},
+	}
+
+	client, err := client.New(config, options)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (f *Factory) NamespaceCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		resources := &corev1.NamespaceList{}
+
+		if err := c.List(context.Background(), resources, &client.ListOptions{}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Name
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
+	}
 }
 
 func (f *Factory) OrganizationNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
 		resources := &identityv1.OrganizationList{}
 
-		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
+		if err := c.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
 		}
 
 		names := make([]string, len(resources.Items))
@@ -75,10 +172,15 @@ func (f *Factory) OrganizationNameCompletionFunc() func(*cobra.Command, []string
 
 func (f *Factory) RoleNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
 		resources := &identityv1.RoleList{}
 
-		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
+		if err := c.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
 		}
 
 		resources.Items = slices.DeleteFunc(resources.Items, func(role identityv1.Role) bool {
@@ -97,10 +199,15 @@ func (f *Factory) RoleNameCompletionFunc() func(*cobra.Command, []string, string
 
 func (f *Factory) UserSubjectCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
 		resources := &identityv1.UserList{}
 
-		if err := f.client.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
+		if err := c.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.IdentityNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
 		}
 
 		names := make([]string, len(resources.Items))

@@ -146,7 +146,10 @@ func createOrganization(factory *factory.Factory) *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			client := factory.Client()
+			client, err := factory.Client()
+			if err != nil {
+				return err
+			}
 
 			if err := o.validate(ctx, client); err != nil {
 				return err
