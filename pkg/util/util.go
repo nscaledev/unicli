@@ -19,6 +19,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
@@ -41,9 +42,9 @@ func GetOrganization(ctx context.Context, cli client.Client, namespace, organiza
 		LabelSelector: labels.NewSelector().Add(*requirement),
 	}
 
-	var resources identityv1.OrganizationList
+	resources := &identityv1.OrganizationList{}
 
-	if err := cli.List(ctx, &resources, options); err != nil {
+	if err := cli.List(ctx, resources, options); err != nil {
 		return nil, err
 	}
 
@@ -56,4 +57,22 @@ func GetOrganization(ctx context.Context, cli client.Client, namespace, organiza
 	}
 
 	return &resources.Items[0], nil
+}
+
+func GetUser(ctx context.Context, cli client.Client, namespace, email string) (*identityv1.User, error) {
+	resources := &identityv1.UserList{}
+
+	if err := cli.List(ctx, resources, &client.ListOptions{Namespace: namespace}); err != nil {
+		return nil, err
+	}
+
+	index := slices.IndexFunc(resources.Items, func(user identityv1.User) bool {
+		return user.Spec.Subject == email
+	})
+
+	if index < 0 {
+		return nil, fmt.Errorf("%w: unable to find user with email %s", errors.ErrValidation, email)
+	}
+
+	return &resources.Items[index], nil
 }

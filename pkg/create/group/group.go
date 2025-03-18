@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package create
+package group
 
 import (
 	"context"
@@ -39,7 +39,7 @@ import (
 )
 
 type createGroupOptions struct {
-	UnikornFlags *flags.UnikornFlags
+	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
 	name         string
@@ -77,11 +77,7 @@ func (o *createGroupOptions) AddFlags(cmd *cobra.Command, factory *factory.Facto
 		return err
 	}
 
-	if err := o.organization.AddFlags(cmd, true); err != nil {
-		return err
-	}
-
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
+	if err := o.organization.AddFlags(cmd, factory, true); err != nil {
 		return err
 	}
 
@@ -157,7 +153,7 @@ func (o *createGroupOptions) validateUsers(ctx context.Context, cli client.Clien
 	o.users = slices.Compact(o.users)
 
 	options := &client.ListOptions{
-		Namespace: o.organization.OrganizationNamespace,
+		Namespace: o.organization.Organization.Status.Namespace,
 	}
 
 	var resources identityv1.UserList
@@ -206,10 +202,10 @@ func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) err
 	// not the underlying user.
 	group := &identityv1.Group{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: o.organization.OrganizationNamespace,
+			Namespace: o.organization.Organization.Status.Namespace,
 			Name:      coreutil.GenerateResourceID(),
 			Labels: map[string]string{
-				constants.OrganizationLabel: o.organization.OrganizationID,
+				constants.OrganizationLabel: o.organization.Organization.Name,
 				constants.NameLabel:         o.name,
 			},
 		},
@@ -236,8 +232,7 @@ func (o *createGroupOptions) execute(ctx context.Context, cli client.Client) err
 	return nil
 }
 
-//nolint:dupl
-func createGroup(factory *factory.Factory) *cobra.Command {
+func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 
 	o := createGroupOptions{

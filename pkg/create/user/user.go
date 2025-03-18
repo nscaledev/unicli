@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package create
+package user
 
 import (
 	"context"
@@ -37,7 +37,7 @@ import (
 )
 
 type createUserOptions struct {
-	UnikornFlags *flags.UnikornFlags
+	UnikornFlags *factory.UnikornFlags
 
 	email        string
 	organization *flags.OrganizationFlags
@@ -50,7 +50,7 @@ func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factor
 		return err
 	}
 
-	if err := o.organization.AddFlags(cmd, false); err != nil {
+	if err := o.organization.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
 
@@ -112,8 +112,7 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 	return nil
 }
 
-//nolint:dupl
-func createUser(factory *factory.Factory) *cobra.Command {
+func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 
 	o := createUserOptions{

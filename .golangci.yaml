@@ -23,6 +23,7 @@ linters:
   - mnd
   - exportloopref
   - execinquery
+  - dupl
 linters-settings:
   gci:
     sections:

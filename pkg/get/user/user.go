@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package get
+package user
 
 import (
 	"context"
@@ -42,24 +42,18 @@ var (
 )
 
 type createUserOptions struct {
-	UnikornFlags *flags.UnikornFlags
+	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
-	email        string
+	user         *flags.UserFlags
 }
 
 func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().StringVar(&o.email, "email", "", "User's email address.")
-
-	if err := cmd.RegisterFlagCompletionFunc("email", factory.UserSubjectCompletionFunc()); err != nil {
+	if err := o.organization.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
 
-	if err := o.organization.AddFlags(cmd, false); err != nil {
-		return err
-	}
-
-	if err := cmd.RegisterFlagCompletionFunc("organization", factory.OrganizationNameCompletionFunc()); err != nil {
+	if err := o.user.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
 
@@ -69,6 +63,7 @@ func (o *createUserOptions) AddFlags(cmd *cobra.Command, factory *factory.Factor
 func (o *createUserOptions) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
 		o.organization.Validate,
+		o.user.Validate,
 	}
 
 	for _, validator := range validators {
@@ -110,9 +105,9 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 
 	options := &client.ListOptions{}
 
-	if o.organization.OrganizationName != "" {
+	if o.organization.Organization != nil {
 		options.LabelSelector = labels.SelectorFromSet(labels.Set{
-			constants.OrganizationLabel: o.organization.OrganizationID,
+			constants.OrganizationLabel: o.organization.Organization.Name,
 		})
 	}
 
@@ -146,17 +141,13 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 			return fmt.Errorf("%w: organization user %s in namespace %s doesn't have corresponding user resource", ErrConsistency, ou.Name, ou.Namespace)
 		}
 
-		if o.email != "" && user.Spec.Subject != o.email {
+		if o.user.Email != "" && user.Spec.Subject != o.user.Email {
 			continue
 		}
 
 		organization, ok := organizationIndex[ou.Labels[constants.OrganizationLabel]]
 		if !ok {
 			return fmt.Errorf("%w: organization user %s in namespace %s doesn't have corresponding organization resource", ErrConsistency, ou.Name, ou.Namespace)
-		}
-
-		if o.organization.OrganizationID != "" && organization.Name != o.organization.OrganizationID {
-			continue
 		}
 
 		table.Rows = append(table.Rows, metav1.TableRow{
@@ -172,12 +163,13 @@ func (o *createUserOptions) execute(ctx context.Context, cli client.Client) erro
 	return printers.NewTablePrinter(printers.PrintOptions{}).PrintObj(table, os.Stdout)
 }
 
-func getUser(factory *factory.Factory) *cobra.Command {
+func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 
 	o := createUserOptions{
 		UnikornFlags: unikornFlags,
 		organization: flags.NewOrganizationFlags(unikornFlags),
+		user:         flags.NewUserFlags(unikornFlags),
 	}
 
 	cmd := &cobra.Command{

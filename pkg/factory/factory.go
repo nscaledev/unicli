@@ -18,6 +18,7 @@ package factory
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 
 	"github.com/spf13/cobra"
@@ -26,7 +27,6 @@ import (
 	computev1 "github.com/unikorn-cloud/compute/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/core/pkg/constants"
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,8 +60,14 @@ func getScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
+type UnikornFlags struct {
+	Kubeconfig        string
+	IdentityNamespace string
+	RegionNamespace   string
+}
+
 type Factory struct {
-	UnikornFlags flags.UnikornFlags
+	UnikornFlags UnikornFlags
 }
 
 func NewFactory() *Factory {
@@ -68,7 +75,9 @@ func NewFactory() *Factory {
 }
 
 func (f *Factory) AddFlags(flags *pflag.FlagSet) {
-	f.UnikornFlags.AddFlags(flags)
+	flags.StringVar(&f.UnikornFlags.Kubeconfig, "kubeconfig", filepath.Join(homedir.HomeDir(), ".kube", "config"), "Kubernetes configuration file")
+	flags.StringVar(&f.UnikornFlags.IdentityNamespace, "identity-namespace", "unikorn-identity", "Identity service namespace")
+	flags.StringVar(&f.UnikornFlags.RegionNamespace, "region-namespace", "unikorn-region", "Region service namespace")
 }
 
 func (f *Factory) RegisterCompletionFunctions(cmd *cobra.Command) error {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package create
+package organization
 
 import (
 	"context"
@@ -29,7 +29,6 @@ import (
 	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -39,7 +38,7 @@ import (
 )
 
 type createOrganizationOptions struct {
-	UnikornFlags *flags.UnikornFlags
+	UnikornFlags *factory.UnikornFlags
 
 	name        string
 	description string
@@ -134,7 +133,7 @@ func (o *createOrganizationOptions) execute(ctx context.Context, cli client.Clie
 	return nil
 }
 
-func createOrganization(factory *factory.Factory) *cobra.Command {
+func Command(factory *factory.Factory) *cobra.Command {
 	o := createOrganizationOptions{
 		UnikornFlags: &factory.UnikornFlags,
 	}

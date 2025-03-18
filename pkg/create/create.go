@@ -19,6 +19,9 @@ package create
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/group"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/organization"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/user"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 )
 
@@ -29,9 +32,9 @@ func Command(factory *factory.Factory) *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		createOrganization(factory),
-		createUser(factory),
-		createGroup(factory),
+		group.Command(factory),
+		organization.Command(factory),
+		user.Command(factory),
 	)
 
 	return cmd
