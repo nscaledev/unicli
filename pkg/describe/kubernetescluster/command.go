@@ -106,7 +106,7 @@ func (o *options) execute(ctx context.Context, cli client.Client) error {
 		"id": o.cluster.Cluster.Annotations[constants.IdentityAnnotation],
 	}
 
-	//nolint:gocritic
+	//nolint:gocritic,exhaustive
 	switch regionInfo.Spec.Provider {
 	case regionv1.ProviderOpenstack:
 		openstackIdentity, err := util.GetOpenstackIdentity(ctx, cli, o.UnikornFlags.RegionNamespace, o.cluster.Cluster.Annotations[constants.IdentityAnnotation])
@@ -155,13 +155,13 @@ func (o *options) execute(ctx context.Context, cli client.Client) error {
 			"id": o.cluster.Cluster.Spec.ClusterManagerID,
 		},
 		"versions": map[string]any{
-			"kubernetes":   o.cluster.Cluster.Spec.Version.Version.String(),
-			"applications": *o.cluster.Cluster.Spec.ApplicationBundle,
+			"kubernetes":   o.cluster.Cluster.Spec.Version.String(),
+			"applications": o.cluster.Cluster.Spec.ApplicationBundle,
 		},
 		"network": map[string]any{
-			"podPrefix":     o.cluster.Cluster.Spec.Network.PodNetwork.IPNet.String(),
-			"servicePrefix": o.cluster.Cluster.Spec.Network.ServiceNetwork.IPNet.String(),
-			"nodePrefix":    o.cluster.Cluster.Spec.Network.NodeNetwork.IPNet.String(),
+			"podPrefix":     o.cluster.Cluster.Spec.Network.PodNetwork.String(),
+			"servicePrefix": o.cluster.Cluster.Spec.Network.ServiceNetwork.String(),
+			"nodePrefix":    o.cluster.Cluster.Spec.Network.NodeNetwork.String(),
 		},
 		"controlPlane": map[string]any{
 			"image": map[string]any{
