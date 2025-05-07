@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
-	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
@@ -37,6 +36,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 )
 
 type options struct {
@@ -143,13 +144,9 @@ func (o *options) execute(ctx context.Context, cli client.Client) error {
 	}
 
 	// Create maps for ID to name lookups
-	organizations := &identityv1.OrganizationList{}
-	if err := cli.List(ctx, organizations, &client.ListOptions{Namespace: o.UnikornFlags.IdentityNamespace}); err != nil {
+	orgNames, err := util.CreateOrganizationNameMap(ctx, cli, o.UnikornFlags.IdentityNamespace)
+	if err != nil {
 		return fmt.Errorf("failed to list organizations: %w", err)
-	}
-	orgNames := make(map[string]string)
-	for _, org := range organizations.Items {
-		orgNames[org.Name] = org.Labels[constants.NameLabel]
 	}
 
 	// Get all KubernetesClusters to count associated clusters

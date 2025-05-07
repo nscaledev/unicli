@@ -25,7 +25,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
-	identityv1 "github.com/unikorn-cloud/identity/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
@@ -38,6 +37,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 )
 
 type options struct {
@@ -197,22 +198,14 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 	}
 
 	// Create maps for ID to name lookups
-	organizations := &identityv1.OrganizationList{}
-	if err := cli.List(ctx, organizations, &client.ListOptions{Namespace: o.UnikornFlags.IdentityNamespace}); err != nil {
+	orgNames, err := util.CreateOrganizationNameMap(ctx, cli, o.UnikornFlags.IdentityNamespace)
+	if err != nil {
 		return fmt.Errorf("failed to list organizations: %w", err)
 	}
-	orgNames := make(map[string]string)
-	for _, org := range organizations.Items {
-		orgNames[org.Name] = org.Labels[constants.NameLabel]
-	}
 
-	projects := &identityv1.ProjectList{}
-	if err := cli.List(ctx, projects); err != nil {
+	projectNames, err := util.CreateProjectNameMap(ctx, cli)
+	if err != nil {
 		return fmt.Errorf("failed to list projects: %w", err)
-	}
-	projectNames := make(map[string]string)
-	for _, proj := range projects.Items {
-		projectNames[proj.Name] = proj.Labels[constants.NameLabel]
 	}
 
 	regions := &regionv1.RegionList{}

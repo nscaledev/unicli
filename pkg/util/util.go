@@ -188,3 +188,79 @@ func GetUser(ctx context.Context, cli client.Client, namespace, email string) (*
 
 	return &resources.Items[index], nil
 }
+
+// CreateOrganizationNameMap creates a map of organization IDs to their display names
+func CreateOrganizationNameMap(ctx context.Context, cli client.Client, namespace string) (map[string]string, error) {
+	organizations := &identityv1.OrganizationList{}
+	if err := cli.List(ctx, organizations, &client.ListOptions{Namespace: namespace}); err != nil {
+		return nil, err
+	}
+
+	orgNames := make(map[string]string)
+	for _, org := range organizations.Items {
+		orgNames[org.Name] = org.Labels[constants.NameLabel]
+	}
+
+	return orgNames, nil
+}
+
+// CreateProjectNameMap creates a map of project IDs to their display names
+func CreateProjectNameMap(ctx context.Context, cli client.Client) (map[string]string, error) {
+	projects := &identityv1.ProjectList{}
+	if err := cli.List(ctx, projects); err != nil {
+		return nil, err
+	}
+
+	projectNames := make(map[string]string)
+	for _, proj := range projects.Items {
+		projectNames[proj.Name] = proj.Labels[constants.NameLabel]
+	}
+
+	return projectNames, nil
+}
+
+// CreateKubernetesClusterNameMap creates a map of kubernetes cluster IDs to their display names
+func CreateKubernetesClusterNameMap(ctx context.Context, cli client.Client, organizationID, projectID string) (map[string]string, error) {
+	l := labels.Set{}
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+	if projectID != "" {
+		l[constants.ProjectLabel] = projectID
+	}
+
+	clusters := &kubernetesv1.KubernetesClusterList{}
+	if err := cli.List(ctx, clusters, &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}); err != nil {
+		return nil, err
+	}
+
+	clusterNames := make(map[string]string)
+	for _, cluster := range clusters.Items {
+		clusterNames[cluster.Name] = cluster.Labels[constants.NameLabel]
+	}
+
+	return clusterNames, nil
+}
+
+// CreateVirtualKubernetesClusterNameMap creates a map of virtual kubernetes cluster IDs to their display names
+func CreateVirtualKubernetesClusterNameMap(ctx context.Context, cli client.Client, organizationID, projectID string) (map[string]string, error) {
+	l := labels.Set{}
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+	if projectID != "" {
+		l[constants.ProjectLabel] = projectID
+	}
+
+	clusters := &kubernetesv1.VirtualKubernetesClusterList{}
+	if err := cli.List(ctx, clusters, &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}); err != nil {
+		return nil, err
+	}
+
+	clusterNames := make(map[string]string)
+	for _, cluster := range clusters.Items {
+		clusterNames[cluster.Name] = cluster.Labels[constants.NameLabel]
+	}
+
+	return clusterNames, nil
+}
