@@ -94,6 +94,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 		Short: "Get kubernetes clusters",
 		Aliases: []string{
 			"kubernetesclusters",
+			"kc",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

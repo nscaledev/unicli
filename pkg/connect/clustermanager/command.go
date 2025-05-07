@@ -45,7 +45,10 @@ func Command(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clustermanager <name>",
 		Short: "Connect to a kubernetes cluster manager",
-		Args:  cobra.ExactArgs(1),
+		Aliases: []string{
+			"cm",
+		},
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()

@@ -44,15 +44,12 @@ type options struct {
 	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
-	detail       bool
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	if err := o.organization.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
-
-	cmd.Flags().BoolVar(&o.detail, "detail", false, "Show detailed information about the cluster managers")
 
 	return nil
 }
@@ -85,6 +82,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 		Short: "Get kubernetes cluster managers",
 		Aliases: []string{
 			"clustermanagers",
+			"cm",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

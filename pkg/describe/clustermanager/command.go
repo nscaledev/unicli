@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubernetescluster
+package clustermanager
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
-	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -42,15 +41,10 @@ type options struct {
 	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
-	project      *flags.ProjectFlags
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	if err := o.organization.AddFlags(cmd, factory, false); err != nil {
-		return err
-	}
-
-	if err := o.project.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
 
@@ -60,7 +54,6 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 func (o *options) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
 		o.organization.Validate,
-		o.project.Validate,
 	}
 
 	for _, validator := range validators {
@@ -75,23 +68,21 @@ func (o *options) validate(ctx context.Context, cli client.Client) error {
 func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 	organizationFlags := flags.NewOrganizationFlags(unikornFlags)
-	projectFlags := flags.NewProjectFlags(unikornFlags, organizationFlags)
 
 	o := options{
 		UnikornFlags: unikornFlags,
 		organization: organizationFlags,
-		project:      projectFlags,
 	}
 
 	cmd := &cobra.Command{
-		Use:   "kubernetescluster [name]",
-		Short: "Show detailed information about a kubernetes cluster",
+		Use:   "clustermanager [id]",
+		Short: "Show detailed information about a cluster manager by ID",
 		Aliases: []string{
-			"kc",
+			"cm",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return fmt.Errorf("exactly one kubernetes cluster name must be specified")
+				return fmt.Errorf("exactly one cluster manager ID must be specified")
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -121,15 +112,11 @@ func Command(factory *factory.Factory) *cobra.Command {
 	return cmd
 }
 
-func (o *options) execute(ctx context.Context, cli client.Client, name string) error {
+func (o *options) execute(ctx context.Context, cli client.Client, id string) error {
 	l := labels.Set{}
 
 	if o.organization.Organization != nil {
 		l[constants.OrganizationLabel] = o.organization.Organization.Name
-	}
-
-	if o.project.Project != nil {
-		l[constants.ProjectLabel] = o.project.Project.Name
 	}
 
 	namespaces := &corev1.NamespaceList{}
@@ -137,34 +124,34 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
-	// Search for the cluster across all namespaces
-	var cluster *kubernetesv1.KubernetesCluster
+	// Search for the cluster manager across all namespaces
+	var manager *kubernetesv1.ClusterManager
 	for _, namespace := range namespaces.Items {
 		options := &client.ListOptions{
 			LabelSelector: labels.SelectorFromSet(l),
 			Namespace:     namespace.Name,
 		}
 
-		resources := &kubernetesv1.KubernetesClusterList{}
+		resources := &kubernetesv1.ClusterManagerList{}
 		if err := cli.List(ctx, resources, options); err != nil {
-			return fmt.Errorf("failed to list clusters in namespace %s: %w", namespace.Name, err)
+			return fmt.Errorf("failed to list cluster managers in namespace %s: %w", namespace.Name, err)
 		}
 
 		for i := range resources.Items {
 			resource := &resources.Items[i]
-			if resource.Labels[constants.NameLabel] == name {
-				cluster = resource
+			if resource.Name == id {
+				manager = resource
 				break
 			}
 		}
 
-		if cluster != nil {
+		if manager != nil {
 			break
 		}
 	}
 
-	if cluster == nil {
-		return fmt.Errorf("kubernetes cluster %s not found", name)
+	if manager == nil {
+		return fmt.Errorf("cluster manager %s not found", id)
 	}
 
 	// Create maps for ID to name lookups
@@ -173,64 +160,44 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 		return fmt.Errorf("failed to list organizations: %w", err)
 	}
 
-	projectNames, err := util.CreateProjectNameMap(ctx, cli)
-	if err != nil {
-		return fmt.Errorf("failed to list projects: %w", err)
+	// Get all KubernetesClusters to count associated clusters
+	allClusters := &kubernetesv1.KubernetesClusterList{}
+	if err := cli.List(ctx, allClusters); err != nil {
+		return fmt.Errorf("failed to list kubernetes clusters: %w", err)
 	}
 
-	regions := &regionv1.RegionList{}
-	if err := cli.List(ctx, regions, &client.ListOptions{Namespace: o.UnikornFlags.RegionNamespace}); err != nil {
-		return fmt.Errorf("failed to list regions: %w", err)
-	}
-	regionNames := make(map[string]string)
-	for _, region := range regions.Items {
-		regionNames[region.Name] = region.Labels[constants.NameLabel]
+	// Create a map of clustermanager IDs to cluster names
+	clusterNames := make(map[string][]string)
+	for _, cluster := range allClusters.Items {
+		clusterNames[cluster.Spec.ClusterManagerID] = append(clusterNames[cluster.Spec.ClusterManagerID], cluster.Labels[constants.NameLabel])
 	}
 
 	// Get organization name
-	orgID := cluster.Labels[constants.OrganizationLabel]
+	orgID := manager.Labels[constants.OrganizationLabel]
 	orgName := orgNames[orgID]
 	if orgName == "" {
 		orgName = orgID
 	}
 
-	// Get project name
-	projID := cluster.Labels[constants.ProjectLabel]
-	projName := projectNames[projID]
-	if projName == "" {
-		projName = projID
-	}
-
-	// Get region name
-	regionID := cluster.Spec.RegionID
-	regionName := regionNames[regionID]
-	if regionName == "" {
-		regionName = regionID
-	}
+	// Get associated cluster names
+	clusters := clusterNames[manager.Name]
 
 	detail := map[string]interface{}{
-		"name": cluster.Labels[constants.NameLabel],
+		"name": manager.Labels[constants.NameLabel],
+		"id":   manager.Name,
 		"organization": map[string]string{
 			"id":   orgID,
 			"name": orgName,
 		},
-		"project": map[string]string{
-			"id":   projID,
-			"name": projName,
-		},
-		"region": map[string]string{
-			"id":   regionID,
-			"name": regionName,
-		},
-		"version":        cluster.Spec.Version.String(),
-		"spec":           cluster.Spec,
-		"clustermanager": cluster.Spec.ClusterManagerID,
-		"status":         cluster.Status,
+		"clusters":  clusters,
+		"namespace": manager.Namespace,
+		"spec":      manager.Spec,
+		"status":    manager.Status,
 	}
 
 	data, err := yaml.Marshal(detail)
 	if err != nil {
-		return fmt.Errorf("failed to marshal cluster %s: %w", name, err)
+		return fmt.Errorf("failed to marshal cluster manager %s: %w", id, err)
 	}
 
 	fmt.Println(string(data))

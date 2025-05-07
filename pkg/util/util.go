@@ -151,6 +151,32 @@ func GetVirtualKubernetesCluster(ctx context.Context, cli client.Client, organiz
 	return &resources.Items[0], nil
 }
 
+func GetClusterManager(ctx context.Context, cli client.Client, organizationID, managerName string) (*kubernetesv1.ClusterManager, error) {
+	l := labels.Set{
+		constants.NameLabel: managerName,
+	}
+
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+
+	options := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+	}
+
+	resources := &kubernetesv1.ClusterManagerList{}
+
+	if err := cli.List(ctx, resources, options); err != nil {
+		return nil, err
+	}
+
+	if len(resources.Items) != 1 {
+		return nil, fmt.Errorf("%w: unable to find cluster manager with name %s", errors.ErrValidation, managerName)
+	}
+
+	return &resources.Items[0], nil
+}
+
 func GetRegion(ctx context.Context, cli client.Client, namespace, id string) (*regionv1.Region, error) {
 	resource := &regionv1.Region{}
 
@@ -263,4 +289,24 @@ func CreateVirtualKubernetesClusterNameMap(ctx context.Context, cli client.Clien
 	}
 
 	return clusterNames, nil
+}
+
+// CreateClusterManagerNameMap creates a map of cluster manager IDs to their display names
+func CreateClusterManagerNameMap(ctx context.Context, cli client.Client, organizationID string) (map[string]string, error) {
+	l := labels.Set{}
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+
+	managers := &kubernetesv1.ClusterManagerList{}
+	if err := cli.List(ctx, managers, &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}); err != nil {
+		return nil, err
+	}
+
+	managerNames := make(map[string]string)
+	for _, manager := range managers.Items {
+		managerNames[manager.Name] = manager.Labels[constants.NameLabel]
+	}
+
+	return managerNames, nil
 }

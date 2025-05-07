@@ -19,18 +19,22 @@ package describe
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/clustermanager"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/kubernetescluster"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/virtualkubernetescluster"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "describe",
-		Short: "Get detailed resource information",
+		Short: "Show detailed information about a resource",
 	}
 
 	cmd.AddCommand(
+		clustermanager.Command(factory),
 		kubernetescluster.Command(factory),
+		virtualkubernetescluster.Command(factory),
 	)
 
 	return cmd
