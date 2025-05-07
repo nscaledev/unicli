@@ -182,7 +182,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, id string) err
 	// Get associated cluster names
 	clusters := clusterNames[manager.Name]
 
-	detail := map[string]interface{}{
+	detail := map[string]any{
 		"name": manager.Labels[constants.NameLabel],
 		"id":   manager.Name,
 		"organization": map[string]string{

@@ -159,8 +159,9 @@ func Command(factory *factory.Factory) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "openstackidentity [name]",
-		Short: "Get OpenStack identities",
+		Use:     "openstackidentity [name]",
+		Aliases: []string{"openstackidentities", "osi"},
+		Short:   "Get OpenStack identities",
 		Long: `Get OpenStack identities from the region service.
 
 This command lists all OpenStack identities in the region service namespace.

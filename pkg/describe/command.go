@@ -21,6 +21,7 @@ import (
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/clustermanager"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/kubernetescluster"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/openstackidentity"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/virtualkubernetescluster"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 )
@@ -28,12 +29,13 @@ import (
 func Command(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "describe",
-		Short: "Show detailed information about a resource",
+		Short: "Describe resources",
 	}
 
 	cmd.AddCommand(
 		clustermanager.Command(factory),
 		kubernetescluster.Command(factory),
+		openstackidentity.Command(factory),
 		virtualkubernetescluster.Command(factory),
 	)
 
