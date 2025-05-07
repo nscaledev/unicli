@@ -22,6 +22,8 @@ import (
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/clustermanager"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/kubernetescluster"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/openstackidentity"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/sshkey"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/user"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/virtualkubernetescluster"
 )
@@ -29,13 +31,15 @@ import (
 func Command(factory *factory.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
-		Short: "Get resource information",
+		Short: "Get resources",
 	}
 
 	cmd.AddCommand(
-		user.Command(factory),
-		kubernetescluster.Command(factory),
 		clustermanager.Command(factory),
+		kubernetescluster.Command(factory),
+		openstackidentity.Command(factory),
+		sshkey.Command(factory),
+		user.Command(factory),
 		virtualkubernetescluster.Command(factory),
 	)
 
