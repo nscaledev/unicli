@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/kubernetescluster"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/user"
 )
 
@@ -31,6 +32,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 
 	cmd.AddCommand(
 		user.Command(factory),
+		kubernetescluster.Command(factory),
 	)
 
 	return cmd
