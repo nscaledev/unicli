@@ -23,6 +23,7 @@ import (
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/clustermanager"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/kubernetescluster"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/user"
+	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/virtualkubernetescluster"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {
@@ -35,6 +36,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 		user.Command(factory),
 		kubernetescluster.Command(factory),
 		clustermanager.Command(factory),
+		virtualkubernetescluster.Command(factory),
 	)
 
 	return cmd

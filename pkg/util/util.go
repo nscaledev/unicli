@@ -121,6 +121,36 @@ func GetKubernetesCluster(ctx context.Context, cli client.Client, organizationID
 	return &resources.Items[0], nil
 }
 
+func GetVirtualKubernetesCluster(ctx context.Context, cli client.Client, organizationID, projectID, clusterName string) (*kubernetesv1.VirtualKubernetesCluster, error) {
+	l := labels.Set{
+		constants.NameLabel: clusterName,
+	}
+
+	if organizationID != "" {
+		l[constants.OrganizationLabel] = organizationID
+	}
+
+	if projectID != "" {
+		l[constants.ProjectLabel] = projectID
+	}
+
+	options := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+	}
+
+	resources := &kubernetesv1.VirtualKubernetesClusterList{}
+
+	if err := cli.List(ctx, resources, options); err != nil {
+		return nil, err
+	}
+
+	if len(resources.Items) != 1 {
+		return nil, fmt.Errorf("%w: unable to find virtual kubernetes cluster with name %s", errors.ErrValidation, clusterName)
+	}
+
+	return &resources.Items[0], nil
+}
+
 func GetRegion(ctx context.Context, cli client.Client, namespace, id string) (*regionv1.Region, error) {
 	resource := &regionv1.Region{}
 
