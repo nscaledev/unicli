@@ -95,51 +95,21 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 	}
 
 	// Get the vcluster pod name
-	getPodCmd := exec.Command("kubectl", "get", "pods", "-n", manager.Namespace)
-	grepCmd := exec.Command("grep", "^vcluster")
-	awkCmd := exec.Command("awk", "{ print $1 }")
-
-	// Set up the pipeline
-	grepCmd.Stdin, _ = getPodCmd.StdoutPipe()
-	awkCmd.Stdin, _ = grepCmd.StdoutPipe()
-	output, _ := awkCmd.StdoutPipe()
-
-	// Start the commands
-	if err := getPodCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start kubectl command: %w", err)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("kubectl get pods -n %s -o name | grep ^pod/vcluster", manager.Namespace))
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get vcluster pod: %w", err)
 	}
-	if err := grepCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start grep command: %w", err)
-	}
-	if err := awkCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start awk command: %w", err)
-	}
-
-	// Read the output
-	var vclusterPod string
-	if _, err := fmt.Fscan(output, &vclusterPod); err != nil {
-		return fmt.Errorf("failed to get vcluster pod name: %w", err)
-	}
-
-	// Remove the '-0' suffix from the pod name
-	vclusterPod = strings.TrimSuffix(vclusterPod, "-0")
-
-	// Wait for the commands to finish
-	if err := getPodCmd.Wait(); err != nil {
-		return fmt.Errorf("kubectl command failed: %w", err)
-	}
-	if err := grepCmd.Wait(); err != nil {
-		return fmt.Errorf("grep command failed: %w", err)
-	}
-	if err := awkCmd.Wait(); err != nil {
-		return fmt.Errorf("awk command failed: %w", err)
-	}
+	podName := strings.TrimSpace(string(output))
+	podName = strings.TrimPrefix(podName, "pod/")
+	podName = strings.TrimSuffix(podName, "-0")
 
 	// Connect to the vcluster
-	connectCmd := exec.Command("sh", "-c", fmt.Sprintf("vcluster connect %s -n %s > /dev/null 2>&1 &", vclusterPod, manager.Namespace))
+	connectCmd := exec.Command("sh", "-c", fmt.Sprintf("vcluster connect %s -n %s > /dev/null 2>&1 &", podName, manager.Namespace))
 	connectCmd.Stdout = nil
 	connectCmd.Stderr = nil
 
+	fmt.Println(connectCmd.String())
 	if err := connectCmd.Start(); err != nil {
 		return fmt.Errorf("failed to start vcluster connect command: %w", err)
 	}

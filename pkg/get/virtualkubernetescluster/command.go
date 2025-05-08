@@ -35,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/cli-runtime/pkg/printers"
 
-	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
@@ -46,7 +45,6 @@ type options struct {
 
 	organization *flags.OrganizationFlags
 	project      *flags.ProjectFlags
-	detail       bool
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
@@ -57,8 +55,6 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	if err := o.project.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
-
-	cmd.Flags().BoolVar(&o.detail, "detail", false, "Show detailed information about the virtual clusters")
 
 	return nil
 }
@@ -214,44 +210,6 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 	regionNames := make(map[string]string)
 	for _, region := range regions.Items {
 		regionNames[region.Name] = region.Labels[constants.NameLabel]
-	}
-
-	// If detail flag is set, print YAML for specified or all clusters
-	if o.detail {
-		// Create a map of cluster names to clusters for easy lookup
-		clusterMap := make(map[string]*kubernetesv1.VirtualKubernetesCluster)
-		for i := range allClusters {
-			cluster := &allClusters[i]
-			clusterMap[cluster.Labels[constants.NameLabel]] = cluster
-		}
-
-		// If a cluster name was provided, only show that one
-		if len(args) > 0 {
-			clusterName := args[0]
-			cluster, exists := clusterMap[clusterName]
-			if !exists {
-				return fmt.Errorf("cluster %s not found", clusterName)
-			}
-
-			detail := getClusterDetails(cluster, orgNames, projectNames, regionNames)
-			data, err := yaml.Marshal(detail)
-			if err != nil {
-				return fmt.Errorf("failed to marshal cluster %s: %w", clusterName, err)
-			}
-			fmt.Println(string(data))
-			return nil
-		}
-
-		// Otherwise show all clusters
-		for _, cluster := range allClusters {
-			detail := getClusterDetails(&cluster, orgNames, projectNames, regionNames)
-			data, err := yaml.Marshal(detail)
-			if err != nil {
-				return fmt.Errorf("failed to marshal cluster %s: %w", cluster.Name, err)
-			}
-			fmt.Printf("---\n%s\n", string(data))
-		}
-		return nil
 	}
 
 	// Create table for normal view
