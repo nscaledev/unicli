@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -64,13 +66,36 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 	clusterID := strings.TrimPrefix(identity.Labels[constants.NameLabel], "kubernetes-cluster-")
 	clusterName := clusterNames[clusterID]
 
-	// Print the information
-	fmt.Printf("Kubernetes Cluster ID: %s\n", clusterID)
-	fmt.Printf("Kubernetes Cluster Name: %s\n", clusterName)
-	fmt.Printf("NKS Region ID: %s\n", identity.Labels[constants.OrganizationLabel])
-	fmt.Printf("OpenStack Identity ID: %s\n", identity.Name)
-	fmt.Printf("OpenStack Project ID: %s\n", *identity.Spec.ProjectID)
+	// Define styles
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#1E3A8A"))
 
+	valueStyle := lipgloss.NewStyle()
+
+	// Create tree
+	t := tree.New().
+		Root("OpenStack Identity").
+		Child(
+			tree.New().
+				Root("Basic Information").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("OpenStack Identity ID:"), valueStyle.Render(identity.Name))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("OpenStack Project ID:"), valueStyle.Render(*identity.Spec.ProjectID))),
+		).
+		Child(
+			tree.New().
+				Root("Kubernetes Cluster").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(clusterID))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(clusterName))),
+		).
+		Child(
+			tree.New().
+				Root("Region").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("NKS Region ID:"), valueStyle.Render(identity.Labels[constants.OrganizationLabel]))),
+		)
+
+	// Print the tree
+	fmt.Println(t)
 	return nil
 }
 

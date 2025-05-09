@@ -19,8 +19,11 @@ package kubernetescluster
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -32,7 +35,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
@@ -84,14 +86,14 @@ func Command(factory *factory.Factory) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "kubernetescluster [name]",
+		Use:   "kubernetescluster [name|id]",
 		Short: "Show detailed information about a kubernetes cluster",
 		Aliases: []string{
 			"kc",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return fmt.Errorf("exactly one kubernetes cluster name must be specified")
+				return fmt.Errorf("exactly one kubernetes cluster name or ID must be specified")
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -121,7 +123,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 	return cmd
 }
 
-func (o *options) execute(ctx context.Context, cli client.Client, name string) error {
+func (o *options) execute(ctx context.Context, cli client.Client, identifier string) error {
 	l := labels.Set{}
 
 	if o.organization.Organization != nil {
@@ -152,7 +154,8 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 
 		for i := range resources.Items {
 			resource := &resources.Items[i]
-			if resource.Labels[constants.NameLabel] == name {
+			// Check both name and ID
+			if resource.Labels[constants.NameLabel] == identifier || resource.Name == identifier {
 				cluster = resource
 				break
 			}
@@ -164,7 +167,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 	}
 
 	if cluster == nil {
-		return fmt.Errorf("kubernetes cluster %s not found", name)
+		return fmt.Errorf("kubernetes cluster %s not found", identifier)
 	}
 
 	// Create maps for ID to name lookups
@@ -208,7 +211,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 		regionName = regionID
 	}
 
-	detail := map[string]interface{}{
+	detail := map[string]any{
 		"name": cluster.Labels[constants.NameLabel],
 		"organization": map[string]string{
 			"id":   orgID,
@@ -222,17 +225,131 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 			"id":   regionID,
 			"name": regionName,
 		},
-		"version":        cluster.Spec.Version.String(),
-		"spec":           cluster.Spec,
+		"version": cluster.Spec.Version.String(),
+		"spec":    cluster.Spec,
+		"network": map[string]string{
+			"node_network":    cluster.Spec.Network.NodeNetwork.String(),
+			"pod_network":     cluster.Spec.Network.PodNetwork.String(),
+			"service_network": cluster.Spec.Network.ServiceNetwork.String(),
+			"dns_nameservers": strings.Join(func() []string {
+				servers := make([]string, len(cluster.Spec.Network.DNSNameservers))
+				for i, server := range cluster.Spec.Network.DNSNameservers {
+					servers[i] = server.String()
+				}
+				return servers
+			}(), ", "),
+		},
 		"clustermanager": cluster.Spec.ClusterManagerID,
 		"status":         cluster.Status,
+		"workloadpools":  cluster.Spec.WorkloadPools,
 	}
 
-	data, err := yaml.Marshal(detail)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cluster %s: %w", name, err)
-	}
+	// Define styles
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#1E3A8A"))
 
-	fmt.Println(string(data))
+	valueStyle := lipgloss.NewStyle()
+
+	// Status styles
+	statusSuccessStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#2E7D32")). // Green
+		Padding(0, 1)
+
+	statusPendingStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#F57F17")). // Amber
+		Padding(0, 1)
+
+	statusErrorStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#C62828")). // Red
+		Padding(0, 1)
+
+	// Create tree
+	t := tree.New().
+		Root("Kubernetes Cluster").
+		Child(
+			tree.New().
+				Root("Basic Information").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["name"].(string)))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(cluster.Name))),
+		).
+		Child(
+			tree.New().
+				Root("Organization").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["organization"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["organization"].(map[string]string)["name"]))),
+		).
+		Child(
+			tree.New().
+				Root("Project").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["project"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["project"].(map[string]string)["name"]))),
+		).
+		Child(
+			tree.New().
+				Root("Region").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["region"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["region"].(map[string]string)["name"]))),
+		).
+		Child(
+			tree.New().
+				Root("Cluster Details").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Version:"), valueStyle.Render(detail["version"].(string)))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Cluster Manager:"), valueStyle.Render(detail["clustermanager"].(string)))),
+		).
+		Child(
+			tree.New().
+				Root("Network").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Node Network:"), valueStyle.Render(detail["network"].(map[string]string)["node_network"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Pod Network:"), valueStyle.Render(detail["network"].(map[string]string)["pod_network"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Service Network:"), valueStyle.Render(detail["network"].(map[string]string)["service_network"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("DNS Nameservers:"), valueStyle.Render(detail["network"].(map[string]string)["dns_nameservers"]))),
+		)
+
+	// Add Workload Pools
+	workloadPoolsTree := tree.New().
+		Root("Workload Pools")
+	workloadPools := detail["workloadpools"].(kubernetesv1.KubernetesClusterWorkloadPoolsSpec)
+	if len(workloadPools.Pools) > 0 {
+		for _, pool := range workloadPools.Pools {
+			poolTree := tree.New().
+				Root(fmt.Sprintf("%s%s", labelStyle.Render("Pool:"), valueStyle.Render(pool.Name))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Flavor ID:"), valueStyle.Render(pool.FlavorID))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Image ID:"), valueStyle.Render(pool.ImageID))).
+				Child(fmt.Sprintf("%s%d", labelStyle.Render("Replicas:"), pool.Replicas))
+			workloadPoolsTree.Child(poolTree)
+		}
+	} else {
+		workloadPoolsTree.Child(valueStyle.Render("No workload pools configured"))
+	}
+	t.Child(workloadPoolsTree)
+
+	// Add Status Information
+	statusTree := tree.New().
+		Root("Status")
+	status := detail["status"].(kubernetesv1.KubernetesClusterStatus)
+	if len(status.Conditions) > 0 {
+		condition := status.Conditions[0]
+		var statusStyle lipgloss.Style
+		switch string(condition.Reason) {
+		case "Provisioned":
+			statusStyle = statusSuccessStyle
+		case "Provisioning":
+			statusStyle = statusPendingStyle
+		default:
+			statusStyle = statusErrorStyle
+		}
+		statusTree.Child(fmt.Sprintf("%s%s", labelStyle.Render("Condition:"), statusStyle.Render(string(condition.Reason))))
+	}
+	t.Child(statusTree)
+
+	// Print the tree
+	fmt.Println(t)
 	return nil
 }

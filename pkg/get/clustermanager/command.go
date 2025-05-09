@@ -19,10 +19,11 @@ package clustermanager
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -31,9 +32,7 @@ import (
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -159,19 +158,33 @@ func (o *options) execute(ctx context.Context, cli client.Client) error {
 		clusterNames[cluster.Spec.ClusterManagerID] = append(clusterNames[cluster.Spec.ClusterManagerID], cluster.Labels[constants.NameLabel])
 	}
 
-	// Create table for normal view
-	table := &metav1.Table{
-		ColumnDefinitions: []metav1.TableColumnDefinition{
-			{Name: "name"},
-			{Name: "id"},
-			{Name: "organization"},
-			{Name: "clusters"},
-			{Name: "namespace"},
-			{Name: "status"},
-		},
-		Rows: make([]metav1.TableRow, 0, len(allManagers)),
+	// Calculate the width needed for the clusters column
+	maxClusterWidth := 20 // Minimum width
+	for _, clusters := range clusterNames {
+		for _, cluster := range clusters {
+			if len(cluster) > maxClusterWidth {
+				maxClusterWidth = len(cluster)
+			}
+		}
 	}
 
+	// Create table
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
+		Headers("Name", "ID", "Organization", "Clusters", "Namespace", "Status").
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#FAFAFA")).
+					Background(lipgloss.Color("#1E3A8A")).
+					Padding(0, 1)
+			}
+			return lipgloss.NewStyle()
+		})
+
+	// Add rows
 	for i := range allManagers {
 		resource := &allManagers[i]
 
@@ -193,26 +206,22 @@ func (o *options) execute(ctx context.Context, cli client.Client) error {
 		clusterList := ""
 		if len(clusters) > 0 {
 			clusterList = strings.Join(clusters, ", ")
+			clusterList = lipgloss.NewStyle().
+				Width(maxClusterWidth).
+				Render(clusterList)
 		}
 
-		row := metav1.TableRow{
-			Cells: []any{
-				resource.Labels[constants.NameLabel],
-				resource.Name,
-				orgName,
-				clusterList,
-				resource.Namespace,
-				statusReason,
-			},
-		}
-
-		table.Rows = append(table.Rows, row)
+		t.Row(
+			resource.Labels[constants.NameLabel],
+			resource.Name,
+			orgName,
+			clusterList,
+			resource.Namespace,
+			statusReason,
+		)
 	}
 
-	printer := printers.NewTablePrinter(printers.PrintOptions{
-		Wide:      true,
-		NoHeaders: false,
-	})
-
-	return printer.PrintObj(table, os.Stdout)
+	// Print the table
+	fmt.Println(t)
+	return nil
 }

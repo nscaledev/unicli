@@ -19,11 +19,12 @@ package openstackidentity
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -31,9 +32,6 @@ import (
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -69,31 +67,6 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 	clusterNames, err := util.CreateKubernetesClusterNameMap(ctx, cli, "", "")
 	if err != nil {
 		return fmt.Errorf("failed to get cluster names: %w", err)
-	}
-
-	// Create table for output
-	table := &metav1.Table{
-		ColumnDefinitions: []metav1.TableColumnDefinition{
-			{
-				Name:        "OpenStack Identity ID",
-				Type:        "string",
-				Description: "The unique identifier of the OpenStack identity",
-				Priority:    0,
-			},
-			{
-				Name:        "Kubernetes Cluster ID",
-				Type:        "string",
-				Description: "The associated Kubernetes cluster identifier",
-				Priority:    0,
-			},
-			{
-				Name:        "Kubernetes Cluster Name",
-				Type:        "string",
-				Description: "The display name of the Kubernetes cluster",
-				Priority:    0,
-			},
-		},
-		Rows: make([]metav1.TableRow, 0, len(resources.Items)),
 	}
 
 	// Create a slice to hold all rows for sorting
@@ -134,23 +107,34 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		return rows[i].identityID < rows[j].identityID
 	})
 
+	// Create table
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
+		Headers("OpenStack Identity ID", "Kubernetes Cluster ID", "Kubernetes Cluster Name").
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#FAFAFA")).
+					Background(lipgloss.Color("#1E3A8A")).
+					Padding(0, 1)
+			}
+			return lipgloss.NewStyle()
+		})
+
 	// Add sorted rows to table
 	for _, row := range rows {
-		table.Rows = append(table.Rows, metav1.TableRow{
-			Cells: []any{
-				row.identityID,
-				row.clusterID,
-				row.clusterName,
-			},
-		})
+		t.Row(
+			row.identityID,
+			row.clusterID,
+			row.clusterName,
+		)
 	}
 
-	printer := printers.NewTablePrinter(printers.PrintOptions{
-		Wide:      true,
-		NoHeaders: false,
-	})
-
-	return printer.PrintObj(table, os.Stdout)
+	// Print the table
+	fmt.Println(t)
+	return nil
 }
 
 func Command(factory *factory.Factory) *cobra.Command {

@@ -19,9 +19,10 @@ package kubernetescluster
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -31,9 +32,7 @@ import (
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/cli-runtime/pkg/printers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -214,21 +213,23 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		regionNames[region.Name] = region.Labels[constants.NameLabel]
 	}
 
-	// Create table for normal view
-	table := &metav1.Table{
-		ColumnDefinitions: []metav1.TableColumnDefinition{
-			{Name: "name"},
-			{Name: "organization"},
-			{Name: "project"},
-			{Name: "region"},
-			{Name: "version"},
-			{Name: "namespace"},
-			{Name: "clustermanager"},
-			{Name: "status"},
-		},
-		Rows: make([]metav1.TableRow, 0, len(allClusters)),
-	}
+	// Create table
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
+		Headers("Name", "ID", "Organization", "Project", "Region", "Status").
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#FAFAFA")).
+					Background(lipgloss.Color("#1E3A8A")).
+					Padding(0, 1)
+			}
+			return lipgloss.NewStyle()
+		})
 
+	// Add rows
 	for i := range allClusters {
 		resource := &allClusters[i]
 		detail := getClusterDetails(resource, orgNames, projectNames, regionNames)
@@ -240,26 +241,17 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 			statusReason = string(status.Conditions[0].Reason)
 		}
 
-		row := metav1.TableRow{
-			Cells: []any{
-				detail["name"],
-				detail["organization"].(map[string]string)["name"],
-				detail["project"].(map[string]string)["name"],
-				detail["region"].(map[string]string)["name"],
-				detail["version"],
-				resource.Namespace,
-				detail["clustermanager"],
-				statusReason,
-			},
-		}
-
-		table.Rows = append(table.Rows, row)
+		t.Row(
+			fmt.Sprintf("%v", detail["name"]),
+			resource.Name,
+			fmt.Sprintf("%v", detail["organization"].(map[string]string)["name"]),
+			fmt.Sprintf("%v", detail["project"].(map[string]string)["name"]),
+			fmt.Sprintf("%v", detail["region"].(map[string]string)["name"]),
+			fmt.Sprintf("%v", statusReason),
+		)
 	}
 
-	printer := printers.NewTablePrinter(printers.PrintOptions{
-		Wide:      true,
-		NoHeaders: false,
-	})
-
-	return printer.PrintObj(table, os.Stdout)
+	// Print the table
+	fmt.Println(t)
+	return nil
 }

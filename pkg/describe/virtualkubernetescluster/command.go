@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -32,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
@@ -121,7 +122,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 	return cmd
 }
 
-func (o *options) execute(ctx context.Context, cli client.Client, name string) error {
+func (o *options) execute(ctx context.Context, cli client.Client, identifier string) error {
 	l := labels.Set{}
 
 	if o.organization.Organization != nil {
@@ -152,7 +153,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 
 		for i := range resources.Items {
 			resource := &resources.Items[i]
-			if resource.Labels[constants.NameLabel] == name {
+			if resource.Labels[constants.NameLabel] == identifier || resource.Name == identifier {
 				cluster = resource
 				break
 			}
@@ -164,7 +165,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 	}
 
 	if cluster == nil {
-		return fmt.Errorf("virtual kubernetes cluster %s not found", name)
+		return fmt.Errorf("virtual kubernetes cluster %s not found", identifier)
 	}
 
 	// Create maps for ID to name lookups
@@ -208,7 +209,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 		regionName = regionID
 	}
 
-	detail := map[string]interface{}{
+	detail := map[string]any{
 		"name": cluster.Labels[constants.NameLabel],
 		"organization": map[string]string{
 			"id":   orgID,
@@ -222,15 +223,102 @@ func (o *options) execute(ctx context.Context, cli client.Client, name string) e
 			"id":   regionID,
 			"name": regionName,
 		},
-		"spec":   cluster.Spec,
-		"status": cluster.Status,
+		"spec":          cluster.Spec,
+		"workloadpools": cluster.Spec.WorkloadPools,
+		"status":        cluster.Status,
 	}
 
-	data, err := yaml.Marshal(detail)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cluster %s: %w", name, err)
-	}
+	// Define styles
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#1E3A8A"))
 
-	fmt.Println(string(data))
+	valueStyle := lipgloss.NewStyle()
+
+	// Status styles
+	statusSuccessStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#2E7D32")). // Green
+		Padding(0, 1)
+
+	statusPendingStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#F57F17")). // Amber
+		Padding(0, 1)
+
+	statusErrorStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#C62828")). // Red
+		Padding(0, 1)
+
+	// Create tree
+	t := tree.New().
+		Root("Virtual Kubernetes Cluster").
+		Child(
+			tree.New().
+				Root("Basic Information").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["name"].(string)))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(cluster.Name))),
+		).
+		Child(
+			tree.New().
+				Root("Organization").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["organization"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["organization"].(map[string]string)["name"]))),
+		).
+		Child(
+			tree.New().
+				Root("Project").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["project"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["project"].(map[string]string)["name"]))),
+		).
+		Child(
+			tree.New().
+				Root("Region").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["region"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["region"].(map[string]string)["name"]))),
+		)
+
+	// Add Workload Pools
+	workloadPoolsTree := tree.New().
+		Root("Workload Pools")
+	workloadPools := cluster.Spec.WorkloadPools
+	if len(workloadPools) > 0 {
+		for _, pool := range workloadPools {
+			poolTree := tree.New().
+				Root(fmt.Sprintf("%s%s", labelStyle.Render("Pool:"), valueStyle.Render(pool.Name))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Flavor ID:"), valueStyle.Render(pool.FlavorID))).
+				Child(fmt.Sprintf("%s%d", labelStyle.Render("Replicas:"), pool.Replicas))
+			workloadPoolsTree.Child(poolTree)
+		}
+	} else {
+		workloadPoolsTree.Child(valueStyle.Render("No workload pools configured"))
+	}
+	t.Child(workloadPoolsTree)
+
+	// Add Status Information
+	statusTree := tree.New().
+		Root("Status")
+	status := detail["status"].(kubernetesv1.VirtualKubernetesClusterStatus)
+	if len(status.Conditions) > 0 {
+		condition := status.Conditions[0]
+		var statusStyle lipgloss.Style
+		switch string(condition.Reason) {
+		case "Provisioned":
+			statusStyle = statusSuccessStyle
+		case "Provisioning":
+			statusStyle = statusPendingStyle
+		default:
+			statusStyle = statusErrorStyle
+		}
+		statusTree.Child(fmt.Sprintf("%s%s", labelStyle.Render("Condition:"), statusStyle.Render(string(condition.Reason))))
+	}
+	t.Child(statusTree)
+
+	// Print the tree
+	fmt.Println(t)
 	return nil
 }

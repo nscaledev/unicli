@@ -19,8 +19,11 @@ package clustermanager
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 
 	"github.com/unikorn-cloud/core/pkg/constants"
@@ -31,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
@@ -195,11 +197,85 @@ func (o *options) execute(ctx context.Context, cli client.Client, id string) err
 		"status":    manager.Status,
 	}
 
-	data, err := yaml.Marshal(detail)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cluster manager %s: %w", id, err)
-	}
+	// Define styles
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#1E3A8A"))
 
-	fmt.Println(string(data))
+	valueStyle := lipgloss.NewStyle()
+
+	// Status styles
+	statusSuccessStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#2E7D32")). // Green
+		Padding(0, 1)
+
+	statusPendingStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#F57F17")). // Amber
+		Padding(0, 1)
+
+	statusErrorStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#C62828")). // Red
+		Padding(0, 1)
+
+	// Create tree
+	t := tree.New().
+		Root("Cluster Manager").
+		Child(
+			tree.New().
+				Root("Basic Information").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["name"].(string)))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["id"].(string)))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Namespace:"), valueStyle.Render(detail["namespace"].(string)))),
+		).
+		Child(
+			tree.New().
+				Root("Organization").
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("ID:"), valueStyle.Render(detail["organization"].(map[string]string)["id"]))).
+				Child(fmt.Sprintf("%s%s", labelStyle.Render("Name:"), valueStyle.Render(detail["organization"].(map[string]string)["name"]))),
+		)
+
+	// Add Associated Clusters
+	clustersTree := tree.New().
+		Root("Associated Clusters")
+	if len(clusters) > 0 {
+		// Join all cluster names with commas
+		clusterList := strings.Join(clusters, ", ")
+		// Wrap the text at 40 characters
+		wrappedClusters := lipgloss.NewStyle().
+			Width(40).
+			Render(clusterList)
+		clustersTree.Child(valueStyle.Render(wrappedClusters))
+	} else {
+		clustersTree.Child(valueStyle.Render("No associated clusters"))
+	}
+	t.Child(clustersTree)
+
+	// Add Status Information
+	statusTree := tree.New().
+		Root("Status")
+	status := detail["status"].(kubernetesv1.ClusterManagerStatus)
+	if len(status.Conditions) > 0 {
+		condition := status.Conditions[0]
+		var statusStyle lipgloss.Style
+		switch string(condition.Reason) {
+		case "Provisioned":
+			statusStyle = statusSuccessStyle
+		case "Provisioning":
+			statusStyle = statusPendingStyle
+		default:
+			statusStyle = statusErrorStyle
+		}
+		statusTree.Child(fmt.Sprintf("%s%s", labelStyle.Render("Condition:"), statusStyle.Render(string(condition.Reason))))
+	}
+	t.Child(statusTree)
+
+	// Print the tree
+	fmt.Println(t)
 	return nil
 }
