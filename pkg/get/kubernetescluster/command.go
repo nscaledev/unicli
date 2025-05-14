@@ -25,9 +25,9 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/flags"
 	"github.com/unikorn-cloud/core/pkg/constants"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
@@ -36,7 +36,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
+	"github.com/nscaledev/unicli/pkg/util"
 )
 
 type options struct {
@@ -139,7 +139,7 @@ func getClusterDetails(cluster *kubernetesv1.KubernetesCluster, orgNames, projec
 		regionName = regionID
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"name": cluster.Labels[constants.NameLabel],
 		"organization": map[string]string{
 			"id":   orgID,
@@ -217,7 +217,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
-		Headers("Name", "ID", "Organization", "Project", "Region", "Status").
+		Headers("Name", "ID", "Version", "Organization", "Project", "Region", "Status").
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
@@ -244,6 +244,7 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		t.Row(
 			fmt.Sprintf("%v", detail["name"]),
 			resource.Name,
+			fmt.Sprintf("%v", detail["version"]),
 			fmt.Sprintf("%v", detail["organization"].(map[string]string)["name"]),
 			fmt.Sprintf("%v", detail["project"].(map[string]string)["name"]),
 			fmt.Sprintf("%v", detail["region"].(map[string]string)["name"]),

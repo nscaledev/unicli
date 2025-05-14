@@ -25,9 +25,9 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/flags"
 	"github.com/unikorn-cloud/core/pkg/constants"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/flags"
 	kubernetesv1 "github.com/unikorn-cloud/kubernetes/pkg/apis/unikorn/v1alpha1"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
@@ -36,7 +36,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
+	"github.com/nscaledev/unicli/pkg/util"
 )
 
 type options struct {

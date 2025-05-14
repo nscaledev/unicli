@@ -19,10 +19,10 @@ package create
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/group"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/organization"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create/user"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/create/group"
+	"github.com/nscaledev/unicli/pkg/create/organization"
+	"github.com/nscaledev/unicli/pkg/create/user"
+	"github.com/nscaledev/unicli/pkg/factory"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {

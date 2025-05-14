@@ -19,13 +19,13 @@ package get
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/clustermanager"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/kubernetescluster"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/openstackidentity"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/sshkey"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/user"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get/virtualkubernetescluster"
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/get/clustermanager"
+	"github.com/nscaledev/unicli/pkg/get/kubernetescluster"
+	"github.com/nscaledev/unicli/pkg/get/openstackidentity"
+	"github.com/nscaledev/unicli/pkg/get/sshkey"
+	"github.com/nscaledev/unicli/pkg/get/user"
+	"github.com/nscaledev/unicli/pkg/get/virtualkubernetescluster"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {

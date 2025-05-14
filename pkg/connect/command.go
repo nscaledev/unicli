@@ -19,8 +19,8 @@ package connect
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/connect/clustermanager"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/connect/clustermanager"
+	"github.com/nscaledev/unicli/pkg/factory"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {

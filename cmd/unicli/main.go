@@ -22,17 +22,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/connect"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/create"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get"
+	"github.com/nscaledev/unicli/pkg/connect"
+	"github.com/nscaledev/unicli/pkg/create"
+	"github.com/nscaledev/unicli/pkg/describe"
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/get"
 )
 
 func main() {
 	cmd := &cobra.Command{
-		Use:   "kubectl-unikorn",
-		Short: "Unikorn kubectl plugin",
+		Use:   "unicli",
+		Short: "Unified Nscale Infrastructure CLI",
 	}
 
 	factory := factory.NewFactory()

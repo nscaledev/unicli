@@ -19,9 +19,9 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/connect"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/get"
+	"github.com/nscaledev/unicli/pkg/connect"
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/get"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {

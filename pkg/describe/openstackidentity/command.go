@@ -26,10 +26,10 @@ import (
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 
+	"github.com/nscaledev/unicli/pkg/errors"
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/util"
 	"github.com/unikorn-cloud/core/pkg/constants"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

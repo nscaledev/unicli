@@ -24,81 +24,86 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nscaledev/unicli/pkg/errors"
+	"github.com/nscaledev/unicli/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/util"
 	"github.com/unikorn-cloud/core/pkg/constants"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/errors"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/util"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type options struct {
-	UnikornFlags *factory.UnikornFlags
-	clusterID    string
-	clusterName  string
+	UnikornFlags      *factory.UnikornFlags
+	clusterIdentifier string // Unified field for cluster name or ID
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
-	cmd.Flags().StringVar(&o.clusterID, "cluster", "", "Kubernetes cluster ID")
-	cmd.Flags().StringVar(&o.clusterName, "name", "", "Kubernetes cluster name")
+	// No flags needed, identifier comes from positional argument.
 	return nil
 }
 
-func (o *options) validate(ctx context.Context, cli client.Client) error {
-	if o.clusterID == "" && o.clusterName == "" {
-		return fmt.Errorf("%w: either cluster ID or name must be provided", errors.ErrValidation)
-	}
-	if o.clusterID != "" && o.clusterName != "" {
-		return fmt.Errorf("%w: cannot specify both cluster ID and name", errors.ErrValidation)
-	}
+func (o *options) validate(_ context.Context, _ client.Client) error {
+	// Validation for argument presence is handled by cobra.ExactArgs(1).
+	// o.clusterIdentifier will be non-empty if cobra validation passes.
+	// The actual validity of the identifier (as a name or ID) is checked in 'execute'.
 	return nil
 }
 
 func (o *options) execute(ctx context.Context, cli client.Client) error {
-	// If we have a cluster name, convert it to an ID
-	if o.clusterName != "" {
-		clusterNames, err := util.CreateKubernetesClusterNameMap(ctx, cli, "", "")
-		if err != nil {
-			return fmt.Errorf("failed to get cluster names: %w", err)
-		}
+	var resolvedClusterID string
 
-		// Find the cluster ID that matches the name
-		found := false
-		for id, name := range clusterNames {
-			if name == o.clusterName {
-				o.clusterID = id
-				found = true
-				break
-			}
-		}
+	// Retrieve all cluster names and IDs to perform the lookup.
+	clusterNameMap, err := util.CreateKubernetesClusterNameMap(ctx, cli, "", "")
+	if err != nil {
+		return fmt.Errorf("failed to get cluster names: %w", err)
+	}
 
-		if !found {
-			return fmt.Errorf("%w: no cluster found with name %s", errors.ErrValidation, o.clusterName)
+	// Attempt to resolve the identifier as a name first.
+	foundAsName := false
+	for id, name := range clusterNameMap {
+		if name == o.clusterIdentifier {
+			resolvedClusterID = id
+			foundAsName = true
+			break
 		}
 	}
 
-	// List all OpenStack identities
+	if !foundAsName {
+		// If not found as a name, assume the identifier is an ID.
+		// Validate that this ID exists in our map of known clusters.
+		if _, idExists := clusterNameMap[o.clusterIdentifier]; idExists {
+			resolvedClusterID = o.clusterIdentifier
+		} else {
+			// The identifier is neither a known name nor a known ID.
+			return fmt.Errorf("%w: cluster '%s' not found. Please provide a valid cluster name or ID", errors.ErrValidation, o.clusterIdentifier)
+		}
+	}
+
+	// Now, resolvedClusterID contains the validated cluster ID.
+	// Proceed to fetch the OpenStack identity.
 	resources := &regionv1.OpenstackIdentityList{}
 	if err := cli.List(ctx, resources, &client.ListOptions{Namespace: o.UnikornFlags.RegionNamespace}); err != nil {
 		return fmt.Errorf("failed to list OpenStack identities: %w", err)
 	}
 
-	// Find the identity that matches the cluster ID
 	var targetIdentity *regionv1.OpenstackIdentity
-	for _, resource := range resources.Items {
-		clusterName := strings.TrimPrefix(resource.Labels[constants.NameLabel], "kubernetes-cluster-")
-		if clusterName == o.clusterID {
-			targetIdentity = &resource
+	for i := range resources.Items {
+		// Iterate by index to correctly get a pointer to the item in the slice,
+		// fixing a potential bug from taking the address of a loop variable copy.
+		resourceInLoop := &resources.Items[i]
+		clusterNameInLabel := strings.TrimPrefix(resourceInLoop.Labels[constants.NameLabel], "kubernetes-cluster-")
+
+		if clusterNameInLabel == resolvedClusterID {
+			targetIdentity = resourceInLoop
 			break
 		}
 	}
 
 	if targetIdentity == nil {
-		return fmt.Errorf("%w: no OpenStack identity found for cluster %s", errors.ErrValidation, o.clusterID)
+		return fmt.Errorf("%w: no OpenStack identity found for cluster %s", errors.ErrValidation, resolvedClusterID)
 	}
 
-	// Print the SSH private key
 	fmt.Println(string(targetIdentity.Spec.SSHPrivateKey))
 	return nil
 }
@@ -109,19 +114,19 @@ func Command(factory *factory.Factory) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "sshkey",
+		Use:   "sshkey <cluster-identifier>",
 		Short: "Get SSH private key for a Kubernetes cluster",
 		Long: `Get the SSH private key for a Kubernetes cluster from its OpenStack identity.
 
-This command retrieves the SSH private key associated with a Kubernetes cluster's OpenStack identity.
-You can specify either the cluster ID or name.
+You can specify either the cluster ID or its name as the <cluster-identifier> argument.
 
 Examples:
   # Get SSH private key using cluster ID
-  kubectl unikorn get sshkey --cluster my-cluster-id
+  unicli get sshkey my-cluster-id
 
   # Get SSH private key using cluster name
-  kubectl unikorn get sshkey --name my-cluster-name`,
+  unicli get sshkey my-cluster-name`,
+		Args: cobra.ExactArgs(1), // Ensures exactly one argument is provided
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
@@ -130,6 +135,9 @@ Examples:
 			if err != nil {
 				return err
 			}
+
+			// Store the positional argument as the cluster identifier.
+			o.clusterIdentifier = args[0]
 
 			if err := o.validate(ctx, client); err != nil {
 				return err
@@ -143,6 +151,7 @@ Examples:
 		},
 	}
 
+	// o.AddFlags now does nothing, but the call pattern is preserved.
 	if err := o.AddFlags(cmd, factory); err != nil {
 		panic(err)
 	}

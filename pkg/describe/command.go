@@ -19,11 +19,11 @@ package describe
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/clustermanager"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/kubernetescluster"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/openstackidentity"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/describe/virtualkubernetescluster"
-	"github.com/unikorn-cloud/kubectl-unikorn/pkg/factory"
+	"github.com/nscaledev/unicli/pkg/describe/clustermanager"
+	"github.com/nscaledev/unicli/pkg/describe/kubernetescluster"
+	"github.com/nscaledev/unicli/pkg/describe/openstackidentity"
+	"github.com/nscaledev/unicli/pkg/describe/virtualkubernetescluster"
+	"github.com/nscaledev/unicli/pkg/factory"
 )
 
 func Command(factory *factory.Factory) *cobra.Command {
