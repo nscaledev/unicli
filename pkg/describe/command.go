@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nscaledev/unicli/pkg/describe/clustermanager"
+	"github.com/nscaledev/unicli/pkg/describe/computeinstance"
 	"github.com/nscaledev/unicli/pkg/describe/kubernetescluster"
 	"github.com/nscaledev/unicli/pkg/describe/openstackidentity"
 	"github.com/nscaledev/unicli/pkg/describe/virtualkubernetescluster"
@@ -34,6 +35,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 
 	cmd.AddCommand(
 		clustermanager.Command(factory),
+		computeinstance.Command(factory),
 		kubernetescluster.Command(factory),
 		openstackidentity.Command(factory),
 		virtualkubernetescluster.Command(factory),

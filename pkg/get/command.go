@@ -21,6 +21,7 @@ import (
 
 	"github.com/nscaledev/unicli/pkg/factory"
 	"github.com/nscaledev/unicli/pkg/get/clustermanager"
+	"github.com/nscaledev/unicli/pkg/get/computeinstance"
 	"github.com/nscaledev/unicli/pkg/get/kubernetescluster"
 	"github.com/nscaledev/unicli/pkg/get/openstackidentity"
 	"github.com/nscaledev/unicli/pkg/get/sshkey"
@@ -36,6 +37,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 
 	cmd.AddCommand(
 		clustermanager.Command(factory),
+		computeinstance.Command(factory),
 		kubernetescluster.Command(factory),
 		openstackidentity.Command(factory),
 		sshkey.Command(factory),
