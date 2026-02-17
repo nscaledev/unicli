@@ -23,6 +23,7 @@ import (
 	"github.com/nscaledev/unicli/pkg/get/clustermanager"
 	"github.com/nscaledev/unicli/pkg/get/computeinstance"
 	"github.com/nscaledev/unicli/pkg/get/kubernetescluster"
+	"github.com/nscaledev/unicli/pkg/get/network"
 	"github.com/nscaledev/unicli/pkg/get/openstackidentity"
 	"github.com/nscaledev/unicli/pkg/get/sshkey"
 	"github.com/nscaledev/unicli/pkg/get/user"
@@ -39,6 +40,7 @@ func Command(factory *factory.Factory) *cobra.Command {
 		clustermanager.Command(factory),
 		computeinstance.Command(factory),
 		kubernetescluster.Command(factory),
+		network.Command(factory),
 		openstackidentity.Command(factory),
 		sshkey.Command(factory),
 		user.Command(factory),
