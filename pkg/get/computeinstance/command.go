@@ -19,6 +19,8 @@ package computeinstance
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -30,6 +32,7 @@ import (
 	"github.com/nscaledev/unicli/pkg/util"
 	computev1 "github.com/unikorn-cloud/compute/pkg/apis/unikorn/v1alpha1"
 	"github.com/unikorn-cloud/core/pkg/constants"
+	regionconstants "github.com/unikorn-cloud/region/pkg/constants"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,11 +41,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// allColumns defines every available column name.
+var allColumns = []string{"name", "id", "flavor", "image", "status", "organization", "project", "region"}
+
+// defaultColumns is the set shown when --columns is not specified.
+var defaultColumns = []string{"name", "flavor", "status", "organization", "project", "region"}
+
 type options struct {
 	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
 	project      *flags.ProjectFlags
+	columns      []string
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
@@ -53,6 +63,9 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	if err := o.project.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
+
+	cmd.Flags().StringSliceVar(&o.columns, "columns", defaultColumns,
+		fmt.Sprintf("Comma-separated list of columns to display. Available: %s", strings.Join(allColumns, ", ")))
 
 	return nil
 }
@@ -66,6 +79,12 @@ func (o *options) validate(ctx context.Context, cli client.Client) error {
 	for _, validator := range validators {
 		if err := validator(ctx, cli); err != nil {
 			return err
+		}
+	}
+
+	for _, col := range o.columns {
+		if !slices.Contains(allColumns, strings.ToLower(col)) {
+			return fmt.Errorf("unknown column %q, available columns: %s", col, strings.Join(allColumns, ", "))
 		}
 	}
 
@@ -224,11 +243,34 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 
 	flavorNames := buildFlavorNameMap(regions)
 
+	// Build region name map (region ID -> display name)
+	regionNames := make(map[string]string)
+	for _, region := range regions.Items {
+		regionNames[region.Name] = region.Labels[constants.NameLabel]
+	}
+
+	// Build headers from selected columns
+	headerMap := map[string]string{
+		"name":         "Name",
+		"id":           "ID",
+		"flavor":       "Flavor",
+		"image":        "Image",
+		"status":       "Status",
+		"organization": "Organization",
+		"project":      "Project",
+		"region":       "Region",
+	}
+
+	headers := make([]string, 0, len(o.columns))
+	for _, col := range o.columns {
+		headers = append(headers, headerMap[col])
+	}
+
 	// Create table
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
-		Headers("Name", "ID", "Flavor", "Image", "Status", "Organization", "Project").
+		Headers(headers...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
@@ -271,15 +313,31 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 			statusReason = string(resource.Status.Conditions[0].Reason)
 		}
 
-		t.Row(
-			name,
-			resource.Name,
-			flavorName,
-			imageID,
-			statusReason,
-			orgName,
-			projName,
-		)
+		// Resolve region from the instance's region label
+		regionID := resource.Labels[regionconstants.RegionLabel]
+		regionName := regionNames[regionID]
+		if regionName == "" {
+			regionName = regionID
+		}
+
+		// Build row values in column order
+		valueMap := map[string]string{
+			"name":         name,
+			"id":           resource.Name,
+			"flavor":       flavorName,
+			"image":        imageID,
+			"status":       statusReason,
+			"organization": orgName,
+			"project":      projName,
+			"region":       regionName,
+		}
+
+		var row []string
+		for _, col := range o.columns {
+			row = append(row, valueMap[col])
+		}
+
+		t.Row(row...)
 	}
 
 	// Print the table
