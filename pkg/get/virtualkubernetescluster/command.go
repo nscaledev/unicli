@@ -19,6 +19,8 @@ package virtualkubernetescluster
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -39,11 +41,18 @@ import (
 	"github.com/nscaledev/unicli/pkg/util"
 )
 
+// allColumns defines every available column name.
+var allColumns = []string{"name", "id", "namespace", "status", "organization", "project", "region"}
+
+// defaultColumns is the set shown when --columns is not specified.
+var defaultColumns = []string{"name", "status", "organization", "project", "region"}
+
 type options struct {
 	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
 	project      *flags.ProjectFlags
+	columns      []string
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
@@ -54,6 +63,9 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	if err := o.project.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
+
+	cmd.Flags().StringSliceVar(&o.columns, "columns", defaultColumns,
+		fmt.Sprintf("Comma-separated list of columns to display. Available: %s", strings.Join(allColumns, ", ")))
 
 	return nil
 }
@@ -67,6 +79,12 @@ func (o *options) validate(ctx context.Context, cli client.Client) error {
 	for _, validator := range validators {
 		if err := validator(ctx, cli); err != nil {
 			return err
+		}
+	}
+
+	for _, col := range o.columns {
+		if !slices.Contains(allColumns, strings.ToLower(col)) {
+			return fmt.Errorf("unknown column %q, available columns: %s", col, strings.Join(allColumns, ", "))
 		}
 	}
 
@@ -211,11 +229,27 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		regionNames[region.Name] = region.Labels[constants.NameLabel]
 	}
 
+	// Build headers from selected columns
+	headerMap := map[string]string{
+		"name":         "Name",
+		"id":           "ID",
+		"namespace":    "Namespace",
+		"status":       "Status",
+		"organization": "Organization",
+		"project":      "Project",
+		"region":       "Region",
+	}
+
+	headers := make([]string, 0, len(o.columns))
+	for _, col := range o.columns {
+		headers = append(headers, headerMap[col])
+	}
+
 	// Create table
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
-		Headers("Cluster Name", "Cluster ID", "Organization", "Project", "Region", "Namespace", "Status").
+		Headers(headers...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
@@ -239,15 +273,22 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 			statusReason = string(status.Conditions[0].Reason)
 		}
 
-		t.Row(
-			fmt.Sprintf("%v", detail["name"]),
-			resource.Name,
-			fmt.Sprintf("%v", detail["organization"].(map[string]string)["name"]),
-			fmt.Sprintf("%v", detail["project"].(map[string]string)["name"]),
-			fmt.Sprintf("%v", detail["region"].(map[string]string)["name"]),
-			fmt.Sprintf("%v", resource.Namespace),
-			fmt.Sprintf("%v", statusReason),
-		)
+		valueMap := map[string]string{
+			"name":         fmt.Sprintf("%v", detail["name"]),
+			"id":           resource.Name,
+			"namespace":    resource.Namespace,
+			"status":       statusReason,
+			"organization": detail["organization"].(map[string]string)["name"],
+			"project":      detail["project"].(map[string]string)["name"],
+			"region":       detail["region"].(map[string]string)["name"],
+		}
+
+		var row []string
+		for _, col := range o.columns {
+			row = append(row, valueMap[col])
+		}
+
+		t.Row(row...)
 	}
 
 	// Print the table
