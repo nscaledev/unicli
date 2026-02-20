@@ -157,6 +157,29 @@ func (f *Factory) NamespaceCompletionFunc() func(*cobra.Command, []string, strin
 	}
 }
 
+func (f *Factory) RegionNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		c, err := f.Client()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		resources := &regionv1.RegionList{}
+
+		if err := c.List(context.Background(), resources, &client.ListOptions{Namespace: f.UnikornFlags.RegionNamespace}); err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		names := make([]string, len(resources.Items))
+
+		for i := range resources.Items {
+			names[i] = resources.Items[i].Labels[constants.NameLabel]
+		}
+
+		return names, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
 func (f *Factory) OrganizationNameCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		c, err := f.Client()

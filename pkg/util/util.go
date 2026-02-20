@@ -187,6 +187,30 @@ func GetRegion(ctx context.Context, cli client.Client, namespace, id string) (*r
 	return resource, nil
 }
 
+func GetRegionByName(ctx context.Context, cli client.Client, namespace, regionName string) (*regionv1.Region, error) {
+	requirement, err := labels.NewRequirement(constants.NameLabel, selection.Equals, []string{regionName})
+	if err != nil {
+		return nil, err
+	}
+
+	options := &client.ListOptions{
+		Namespace:     namespace,
+		LabelSelector: labels.NewSelector().Add(*requirement),
+	}
+
+	resources := &regionv1.RegionList{}
+
+	if err := cli.List(ctx, resources, options); err != nil {
+		return nil, err
+	}
+
+	if len(resources.Items) != 1 {
+		return nil, fmt.Errorf("%w: unable to find region with name %s", errors.ErrValidation, regionName)
+	}
+
+	return &resources.Items[0], nil
+}
+
 func GetOpenstackIdentity(ctx context.Context, cli client.Client, namespace, id string) (*regionv1.OpenstackIdentity, error) {
 	resource := &regionv1.OpenstackIdentity{}
 
