@@ -52,6 +52,7 @@ type options struct {
 
 	organization *flags.OrganizationFlags
 	project      *flags.ProjectFlags
+	region       *flags.RegionFlags
 	columns      []string
 }
 
@@ -61,6 +62,10 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 	}
 
 	if err := o.project.AddFlags(cmd, factory, false); err != nil {
+		return err
+	}
+
+	if err := o.region.AddFlags(cmd, factory, false); err != nil {
 		return err
 	}
 
@@ -74,6 +79,7 @@ func (o *options) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
 		o.organization.Validate,
 		o.project.Validate,
+		o.region.Validate,
 	}
 
 	for _, validator := range validators {
@@ -95,11 +101,13 @@ func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 	organizationFlags := flags.NewOrganizationFlags(unikornFlags)
 	projectFlags := flags.NewProjectFlags(unikornFlags, organizationFlags)
+	regionFlags := flags.NewRegionFlags(unikornFlags)
 
 	o := options{
 		UnikornFlags: unikornFlags,
 		organization: organizationFlags,
 		project:      projectFlags,
+		region:       regionFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -201,6 +209,10 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 
 	if o.project.Project != nil {
 		l[constants.ProjectLabel] = o.project.Project.Name
+	}
+
+	if o.region.Region != nil {
+		l[regionconstants.RegionLabel] = o.region.Region.Name
 	}
 
 	namespaces := &corev1.NamespaceList{}
