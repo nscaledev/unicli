@@ -19,6 +19,8 @@ package network
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -29,6 +31,7 @@ import (
 	"github.com/nscaledev/unicli/pkg/flags"
 	"github.com/nscaledev/unicli/pkg/util"
 	"github.com/unikorn-cloud/core/pkg/constants"
+	regionconstants "github.com/unikorn-cloud/region/pkg/constants"
 	regionv1 "github.com/unikorn-cloud/region/pkg/apis/unikorn/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,11 +40,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// allColumns defines every available column name.
+var allColumns = []string{"name", "id", "prefix", "provider", "status", "organization", "project", "region"}
+
+// defaultColumns is the set shown when --columns is not specified.
+var defaultColumns = []string{"name", "prefix", "provider", "status", "organization", "project", "region"}
+
 type options struct {
 	UnikornFlags *factory.UnikornFlags
 
 	organization *flags.OrganizationFlags
 	project      *flags.ProjectFlags
+	region       *flags.RegionFlags
+	columns      []string
 }
 
 func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
@@ -53,6 +64,13 @@ func (o *options) AddFlags(cmd *cobra.Command, factory *factory.Factory) error {
 		return err
 	}
 
+	if err := o.region.AddFlags(cmd, factory, false); err != nil {
+		return err
+	}
+
+	cmd.Flags().StringSliceVar(&o.columns, "columns", defaultColumns,
+		fmt.Sprintf("Comma-separated list of columns to display. Available: %s", strings.Join(allColumns, ", ")))
+
 	return nil
 }
 
@@ -60,11 +78,18 @@ func (o *options) validate(ctx context.Context, cli client.Client) error {
 	validators := []func(context.Context, client.Client) error{
 		o.organization.Validate,
 		o.project.Validate,
+		o.region.Validate,
 	}
 
 	for _, validator := range validators {
 		if err := validator(ctx, cli); err != nil {
 			return err
+		}
+	}
+
+	for _, col := range o.columns {
+		if !slices.Contains(allColumns, strings.ToLower(col)) {
+			return fmt.Errorf("unknown column %q, available columns: %s", col, strings.Join(allColumns, ", "))
 		}
 	}
 
@@ -75,11 +100,13 @@ func Command(factory *factory.Factory) *cobra.Command {
 	unikornFlags := &factory.UnikornFlags
 	organizationFlags := flags.NewOrganizationFlags(unikornFlags)
 	projectFlags := flags.NewProjectFlags(unikornFlags, organizationFlags)
+	regionFlags := flags.NewRegionFlags(unikornFlags)
 
 	o := options{
 		UnikornFlags: unikornFlags,
 		organization: organizationFlags,
 		project:      projectFlags,
+		region:       regionFlags,
 	}
 
 	cmd := &cobra.Command{
@@ -128,6 +155,10 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		l[constants.ProjectLabel] = o.project.Project.Name
 	}
 
+	if o.region.Region != nil {
+		l[regionconstants.RegionLabel] = o.region.Region.Name
+	}
+
 	namespaces := &corev1.NamespaceList{}
 	if err := cli.List(ctx, namespaces); err != nil {
 		return fmt.Errorf("failed to list namespaces: %w", err)
@@ -161,11 +192,39 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 		return fmt.Errorf("failed to list projects: %w", err)
 	}
 
+	regions := &regionv1.RegionList{}
+	if err := cli.List(ctx, regions, &client.ListOptions{Namespace: o.UnikornFlags.RegionNamespace}); err != nil {
+		return fmt.Errorf("failed to list regions: %w", err)
+	}
+
+	// Build region name map (region ID -> display name)
+	regionNames := make(map[string]string)
+	for _, region := range regions.Items {
+		regionNames[region.Name] = region.Labels[constants.NameLabel]
+	}
+
+	// Build headers from selected columns
+	headerMap := map[string]string{
+		"name":         "Name",
+		"id":           "ID",
+		"prefix":       "Prefix",
+		"provider":     "Provider",
+		"status":       "Status",
+		"organization": "Organization",
+		"project":      "Project",
+		"region":       "Region",
+	}
+
+	headers := make([]string, 0, len(o.columns))
+	for _, col := range o.columns {
+		headers = append(headers, headerMap[col])
+	}
+
 	// Create table
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1E3A8A"))).
-		Headers("Name", "ID", "Prefix", "Provider", "Status", "Organization", "Project").
+		Headers(headers...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
@@ -207,15 +266,31 @@ func (o *options) execute(ctx context.Context, cli client.Client, args []string)
 			statusReason = string(resource.Status.Conditions[0].Reason)
 		}
 
-		t.Row(
-			name,
-			resource.Name,
-			prefix,
-			provider,
-			statusReason,
-			orgName,
-			projName,
-		)
+		// Resolve region from the network's region label
+		regionID := resource.Labels[regionconstants.RegionLabel]
+		regionName := regionNames[regionID]
+		if regionName == "" {
+			regionName = regionID
+		}
+
+		// Build row values in column order
+		valueMap := map[string]string{
+			"name":         name,
+			"id":           resource.Name,
+			"prefix":       prefix,
+			"provider":     provider,
+			"status":       statusReason,
+			"organization": orgName,
+			"project":      projName,
+			"region":       regionName,
+		}
+
+		var row []string
+		for _, col := range o.columns {
+			row = append(row, valueMap[col])
+		}
+
+		t.Row(row...)
 	}
 
 	// Print the table
